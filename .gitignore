@@ -1,0 +1,25 @@
+# Go
+/burrow
+/burrow.exe
+*.exe
+*.test
+*.out
+/dist/
+
+# Frontend
+node_modules/
+web/dist/*
+!web/dist/.gitkeep
+
+# Local state / secrets — never commit
+*.env
+.env*
+tsnet-state/
+*.db
+*.db-*
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
