@@ -1,29 +1,32 @@
 # Burrow — Progress
 
 ## Current phase
-**Phase 0 — Repo + hello world over Tailscale** (in progress)
+**Phase 0 — Repo + hello world over Tailscale** — code done, waiting on [HUMAN] phone test
 
 ## Done
-- Git repo initialised (`main` branch)
-- MIT LICENSE, `.gitignore`, stub README, this file
+- Git repo (`main`), MIT LICENSE, `.gitignore`, `.gitattributes` (LF endings), stub README
+- Go 1.27.4 + GitHub CLI 2.106 installed via winget (2026-11-26)
+- `internal/config.AppDataDir()` → `os.UserConfigDir()/burrow` (0700), with test
+- `cmd/burrow/main.go`:
+  - `127.0.0.1:8080` plain HTTP (local only)
+  - `tsnet.Server` hostname `burrow`, state in `<appdata>/burrow/tsnet`
+  - Prints Tailscale login URL on first run (polls LocalClient status), warns if HTTPS certs aren't enabled
+  - `ListenTLS :443` once connected, prints `https://<magicdns-name>`
+  - Hello page with nosniff + strict CSP; handler test
+- Verified locally: build/vet/test pass, localhost serves page, login URL printed
 
 ## Next
-- [ ] Owner installs Go (≥ 1.24) and GitHub CLI
-- [ ] Owner provides GitHub username → `go mod init github.com/<user>/burrow`
-- [ ] `cmd/burrow/main.go`: tsnet server (hostname `burrow`, state in `os.UserConfigDir()/burrow/tsnet`), `ListenTLS :443` + `127.0.0.1:8080`, "Hello from Burrow 🐇", print login URL on first run
-- [ ] [HUMAN] Tailscale on phone, MagicDNS + HTTPS certs enabled, approve device, test with Wi-Fi off
-
-## Environment (owner's machine, 2026-11-26)
-- Windows 11 Pro
-- Node v24.13.0, npm 11.6.2, git 2.53.0 — OK
-- Go — **missing**
-- gh — **missing**
+- [ ] [HUMAN] Approve device via printed link; enable MagicDNS + HTTPS certs; phone test with Wi-Fi off
+- [ ] [HUMAN] `gh auth login` → then replace placeholder module path `github.com/burrow-placeholder/burrow` with real username, create GitHub repo, push
+- [ ] Then Phase 1 (start with `fsjail` + fuzz tests)
 
 ## Open questions
-- GitHub username (for module path)
+- GitHub username (module path is a placeholder until then)
 
 ## Decisions
 - Default branch `main`.
+- tsnet logs are silenced by default; set `BURROW_DEBUG=1` to see them.
+- Login URL detected by polling tsnet LocalClient status (more reliable than parsing log lines).
 
 ## Known issues
 - None yet
