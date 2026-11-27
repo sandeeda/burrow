@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError, type Session } from './api'
 
-/** Glass login card. Password managers can save the password (username "burrow"). */
+/** iOS-style login screen. Password managers can save the password (username "burrow"). */
 export function Login({ onLoggedIn }: { onLoggedIn: (s: Session) => void }) {
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
@@ -52,8 +52,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: (s: Session) => void }) {
 
   return (
     <div className="login">
-      <div className="ambient" aria-hidden="true" />
-      <form className={'login-card glass' + (shaking ? ' shaking' : '')} onAnimationEnd={() => setShaking(false)} onSubmit={submit}>
+      <form className={'login-card' + (shaking ? ' shaking' : '')} onAnimationEnd={() => setShaking(false)} onSubmit={submit}>
         <img className="login-icon" src="/icons/icon-192.png" alt="" width={84} height={84} />
         <h1>Burrow</h1>
         <p className="login-sub">Enter your password to open your files.</p>

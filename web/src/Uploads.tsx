@@ -101,7 +101,7 @@ export function UploadPanel({ items, onCancel, onClear }: { items: UploadItem[];
   const pct = total ? Math.round((loaded / total) * 100) : 100
 
   return (
-    <div className={'uploads glass' + (leaving ? ' leaving' : '')} role="status" aria-live="polite">
+    <div className={'uploads material' + (leaving ? ' leaving' : '')} role="status" aria-live="polite">
       <div className="uploads-head">
         <strong>
           {active.length
@@ -115,7 +115,7 @@ export function UploadPanel({ items, onCancel, onClear }: { items: UploadItem[];
             Cancel
           </button>
         ) : (
-          <button className="glass-btn small" aria-label="Dismiss" onClick={onClear}>
+          <button className="round-btn small" aria-label="Dismiss" onClick={onClear}>
             <CloseIcon size={20} />
           </button>
         )}

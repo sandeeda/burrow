@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { downloadURL, thumbURL, type Entry } from './api'
 import { useEscape } from './ui'
 import { animateSpring, BOUNCY, rubberBand, SNAPPY, VelocityTracker, reducedMotion } from './spring'
-import { ChevronLeft, ChevronRight, CloseIcon, DownloadIcon, ExternalIcon, MoreIcon } from './icons'
+import { ChevronLeft, ChevronRight, DownloadIcon, EllipsisCircle, ExternalIcon } from './icons'
 import { hasThumb, isHeic, kindOf, triggerDownload } from './util'
 
 type Props = {
@@ -328,22 +328,22 @@ export function Viewer({ items, index, onIndex, onClose, onMenu }: Props) {
         )}
       </div>
 
-      <div className="viewer-top">
-        <button className="glass-btn glass" aria-label="Close" onClick={close}>
-          <CloseIcon size={20} />
+      <div className="viewer-top material">
+        <button className="nav-back" aria-label="Back" onClick={close}>
+          <ChevronLeft size={28} />
         </button>
-        <div className="viewer-title glass">
+        <div className="viewer-title">
           <span className="viewer-name">{entry.name}</span>
           <span className="viewer-count">
             {index + 1} of {items.length}
           </span>
         </div>
-        <button className="glass-btn glass" aria-label="More actions" onClick={() => onMenu(entry)}>
-          <MoreIcon size={20} />
+        <button className="nav-btn" aria-label="More actions" onClick={() => onMenu(entry)}>
+          <EllipsisCircle size={26} />
         </button>
       </div>
 
-      <div className="viewer-bottom glass">
+      <div className="viewer-bottom material">
         <button aria-label="Download" onClick={() => triggerDownload(downloadURL(entry.path))}>
           <DownloadIcon size={22} />
         </button>
@@ -355,12 +355,12 @@ export function Viewer({ items, index, onIndex, onClose, onMenu }: Props) {
       </div>
 
       {index > 0 && (
-        <button className="viewer-nav left glass" aria-label="Previous" onClick={() => go(-1)}>
+        <button className="viewer-nav left material" aria-label="Previous" onClick={() => go(-1)}>
           <ChevronLeft size={26} />
         </button>
       )}
       {index < items.length - 1 && (
-        <button className="viewer-nav right glass" aria-label="Next" onClick={() => go(1)}>
+        <button className="viewer-nav right material" aria-label="Next" onClick={() => go(1)}>
           <ChevronRight size={26} />
         </button>
       )}
@@ -375,7 +375,7 @@ function Media({ entry, active }: { entry: Entry; active: boolean }) {
 
   if (failed) {
     return (
-      <div className="viewer-fallback glass">
+      <div className="viewer-fallback">
         <p>
           {isHeic(entry)
             ? "This browser can't show HEIC photos (iPhone format). Safari on iPhone, iPad and Mac can."

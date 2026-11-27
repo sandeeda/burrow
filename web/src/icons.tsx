@@ -172,3 +172,43 @@ export const LogoutIcon = (p: P) => (
     <path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15M10 16l4-4-4-4M14 12H4" />
   </Svg>
 )
+// ---- iOS-style filled glyphs ----
+
+/** Files-app folder: filled blue with a lighter front panel. */
+export const FolderFill = ({ size = 24, className }: P) => (
+  <svg width={size} height={size * 0.8} viewBox="0 0 60 48" aria-hidden="true" className={className}>
+    <path d="M4 6a4 4 0 0 1 4-4h14.5a4 4 0 0 1 3 1.4L29 7.5h23a4 4 0 0 1 4 4V40a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z" fill="var(--folder-back)" />
+    <path d="M4 14a4 4 0 0 1 4-4h44a4 4 0 0 1 4 4v26a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z" fill="var(--folder-front)" />
+  </svg>
+)
+
+/** Generic document page with a folded corner, tinted per file kind. */
+export const DocFill = ({ size = 24, className, label }: P & { label?: string }) => (
+  <svg width={size * 0.8} height={size} viewBox="0 0 40 50" aria-hidden="true" className={className}>
+    <path d="M4 4a3 3 0 0 1 3-3h19l11 11v34a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z" fill="var(--doc-bg)" stroke="var(--doc-edge)" strokeWidth="1" />
+    <path d="M26 1v8a3 3 0 0 0 3 3h8" fill="none" stroke="var(--doc-edge)" strokeWidth="1" />
+    {label && (
+      <text x="20.5" y="36" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="currentColor" fontFamily="-apple-system, system-ui, sans-serif">
+        {label}
+      </text>
+    )}
+  </svg>
+)
+
+/** Like SF Symbols "ellipsis.circle". */
+export const EllipsisCircle = (p: P) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9.2" />
+    <circle cx="7.9" cy="12" r="1.05" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="1.05" fill="currentColor" stroke="none" />
+    <circle cx="16.1" cy="12" r="1.05" fill="currentColor" stroke="none" />
+  </Svg>
+)
+
+/** Small camera glyph shown on video thumbnails, like the Photos app. */
+export const VideoGlyph = ({ size = 16, className }: P) => (
+  <svg width={size} height={size * 0.7} viewBox="0 0 20 14" aria-hidden="true" className={className}>
+    <rect x="0.5" y="1" width="13" height="12" rx="3" fill="#fff" />
+    <path d="M14.5 5.2 19 2.6v8.8l-4.5-2.6z" fill="#fff" />
+  </svg>
+)

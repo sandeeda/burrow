@@ -51,15 +51,13 @@ export function Root() {
     case 'checking':
       return (
         <div className="login">
-          <div className="ambient" aria-hidden="true" />
           <img className="splash-icon" src="/icons/icon-192.png" alt="Burrow" width={84} height={84} />
         </div>
       )
     case 'offline':
       return (
         <div className="login">
-          <div className="ambient" aria-hidden="true" />
-          <div className="login-card glass">
+          <div className="login-card">
             <img className="login-icon" src="/icons/icon-192.png" alt="" width={84} height={84} />
             <h1>Can't reach your PC</h1>
             <p className="login-sub">{state.message}</p>

@@ -1,47 +1,39 @@
-// Shared UI: glass sheets, menus and alerts with spring motion, long-press,
-// file icons.
+// Shared UI in the style of iOS system controls: action sheets, menus and
+// alerts (with spring motion), long-press, and Files-app icons.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { Entry } from './api'
 import { kindOf } from './util'
 import { animateSpring, rubberBand, SNAPPY, VelocityTracker } from './spring'
-import { AudioIcon, CheckIcon, FileIcon, FolderIcon, ImageIcon, PdfIcon, TextIcon, VideoIcon } from './icons'
+import { CheckIcon, DocFill, FolderFill } from './icons'
 
-export function KindIcon({ entry, size = 24 }: { entry: Entry; size?: number }) {
-  switch (kindOf(entry)) {
-    case 'folder':
-      return <FolderIcon size={size} className="ic-folder" />
-    case 'image':
-      return <ImageIcon size={size} className="ic-image" />
-    case 'video':
-      return <VideoIcon size={size} className="ic-video" />
-    case 'audio':
-      return <AudioIcon size={size} className="ic-audio" />
-    case 'pdf':
-      return <PdfIcon size={size} className="ic-pdf" />
-    case 'text':
-      return <TextIcon size={size} className="ic-text" />
-    default:
-      return <FileIcon size={size} className="ic-file" />
-  }
+const extLabel = (name: string) => {
+  const i = name.lastIndexOf('.')
+  return i > 0 ? name.slice(i + 1, i + 5).toUpperCase() : ''
 }
 
-export type SheetAction = { label: string; icon?: ReactNode; danger?: boolean; onSelect: () => void }
+/** Files-app style icon: blue folder, or a document page labelled with its type. */
+export function KindIcon({ entry, size = 24 }: { entry: Entry; size?: number }) {
+  const kind = kindOf(entry)
+  if (kind === 'folder') return <FolderFill size={size} className="ic-folder" />
+  return <DocFill size={size} className={'ic-doc ic-' + kind} label={extLabel(entry.name)} />
+}
+export type SheetAction = { label: string; danger?: boolean; onSelect: () => void }
 
 const EXIT_MS = 220
 
 /**
- * Bottom sheet that springs up, follows your finger when dragged and is
- * dismissed by flicking it down. Centred card on wide screens.
+ * iOS action sheet: centred options in a rounded group, a separate Cancel
+ * button. Springs up, and can be flicked down to dismiss.
  */
 export function ActionSheet({
   title,
-  header,
+  message,
   actions,
   onClose,
 }: {
   title?: string
-  header?: ReactNode
+  message?: string
   actions: SheetAction[]
   onClose: () => void
 }) {
@@ -115,7 +107,7 @@ export function ActionSheet({
       <div ref={backdrop} className="dim" onClick={() => close()} />
       <div
         ref={sheet}
-        className="sheet glass"
+        className="sheet"
         role="menu"
         aria-label={title}
         onPointerDown={onPointerDown}
@@ -123,10 +115,13 @@ export function ActionSheet({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <div className="grabber" aria-hidden="true" />
-        {header}
-        {title && !header && <div className="sheet-title">{title}</div>}
-        <div className="sheet-group">
+        <div className="sheet-group material">
+          {(title || message) && (
+            <div className="sheet-title">
+              {title && <strong>{title}</strong>}
+              {message && <span>{message}</span>}
+            </div>
+          )}
           {actions.map((a) => (
             <button
               key={a.label}
@@ -137,12 +132,11 @@ export function ActionSheet({
                 close(0, a.onSelect)
               }}
             >
-              <span>{a.label}</span>
-              {a.icon}
+              {a.label}
             </button>
           ))}
         </div>
-        <button className="sheet-item sheet-cancel" onClick={() => close()}>
+        <button className="sheet-cancel material" onClick={() => close()}>
           Cancel
         </button>
       </div>
@@ -177,7 +171,7 @@ export function Menu({ anchor, sections, onClose }: { anchor: DOMRect; sections:
   return createPortal(
     <div className="overlay">
       <div className="dim clear" onClick={() => close()} />
-      <div className={'menu glass' + (leaving ? ' leaving' : '')} style={style} role="menu">
+      <div className={'menu material' + (leaving ? ' leaving' : '')} style={style} role="menu">
         {sections.map((s, i) => (
           <div key={i} className="menu-section">
             {s.title && <div className="menu-title">{s.title}</div>}
@@ -245,7 +239,7 @@ export function Alert({ title, message, confirmLabel, danger, input, onConfirm, 
   return createPortal(
     <div className="overlay center">
       <div className={'dim' + (leaving ? ' leaving' : '')} />
-      <form className={'alert glass' + (leaving ? ' leaving' : '')} role="alertdialog" aria-modal="true" aria-label={title} onSubmit={submit}>
+      <form className={'alert material' + (leaving ? ' leaving' : '')} role="alertdialog" aria-modal="true" aria-label={title} onSubmit={submit}>
         <div className="alert-body">
           <h2>{title}</h2>
           {message && <p>{message}</p>}

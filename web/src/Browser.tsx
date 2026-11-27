@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { thumbURL, type Entry } from './api'
 import { KindIcon, useLongPress } from './ui'
-import { ChevronRight, PlayBadge } from './icons'
+import { ChevronRight, EllipsisCircle, VideoGlyph } from './icons'
 import { formatDate, formatSize, hasThumb, kindOf, parentOf } from './util'
 
 const PAGE = 150
@@ -45,7 +45,7 @@ export function Browser({ entries, view, showFolder, onOpen, onMenu, resetKey }:
           ))}
         </ul>
       ) : (
-        <ul className="list glass-card" key={resetKey}>
+        <ul className="list" key={resetKey}>
           {shown.map((e) => (
             <Row key={e.path} entry={e} showFolder={showFolder} onOpen={onOpen} onMenu={onMenu} />
           ))}
@@ -102,23 +102,36 @@ function Tile({ entry, delay, onOpen, onMenu }: ItemProps & { delay: number }) {
   const lp = useLongPress(() => onMenu(entry))
   const kind = kindOf(entry)
   const photo = hasThumb(entry)
+  const style = photo ? 'photo' : kind === 'video' ? 'video' : 'doc'
   return (
     <li style={{ '--i': delay } as React.CSSProperties}>
       <button
-        className={'tile' + (photo ? ' photo' : ' doc')}
+        className={'tile ' + style}
         onClick={() => !lp.consumed() && onOpen(entry)}
         aria-label={entry.name}
         title={entry.name}
         {...lp.handlers}
       >
-        <Thumb entry={entry} size={photo ? 32 : 44} />
-        {kind === 'video' && <PlayBadge className="badge" size={24} />}
-        {!photo && <span className="tile-name">{entry.name}</span>}
+        {style === 'photo' && <Thumb entry={entry} size={32} />}
+        {style === 'video' && (
+          <>
+            <PlayCircle />
+            <VideoGlyph className="badge" />
+          </>
+        )}
+        {style === 'doc' && <KindIcon entry={entry} size={kind === 'folder' ? 68 : 52} />}
+        {style !== 'photo' && <span className="tile-name">{entry.name}</span>}
       </button>
     </li>
   )
 }
 
+const PlayCircle = () => (
+  <svg className="play" width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+    <circle cx="20" cy="20" r="19" fill="rgba(255,255,255,.22)" />
+    <path d="m16 12.5 12 7.5-12 7.5z" fill="#fff" />
+  </svg>
+)
 function Row({ entry, showFolder, onOpen, onMenu }: ItemProps & { showFolder?: boolean }) {
   const lp = useLongPress(() => onMenu(entry))
   const meta = [entry.isDir ? null : formatSize(entry.size), formatDate(entry.modTime)].filter(Boolean).join(' · ')
@@ -127,7 +140,7 @@ function Row({ entry, showFolder, onOpen, onMenu }: ItemProps & { showFolder?: b
     <li className="row">
       <button className="row-main" onClick={() => !lp.consumed() && onOpen(entry)} {...lp.handlers}>
         <span className="row-icon">
-          <Thumb entry={entry} size={26} />
+          <Thumb entry={entry} size={30} />
         </span>
         <span className="row-text">
           <span className="row-name">{entry.name}</span>
@@ -140,7 +153,7 @@ function Row({ entry, showFolder, onOpen, onMenu }: ItemProps & { showFolder?: b
       </button>
       {!entry.isDir && (
         <button className="row-more" aria-label={`More actions for ${entry.name}`} onClick={() => onMenu(entry)}>
-          •••
+          <EllipsisCircle size={22} />
         </button>
       )}
     </li>

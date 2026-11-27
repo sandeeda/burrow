@@ -1,31 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, downloadURL, thumbURL, type Entry, type Info } from './api'
+import { api, downloadURL, type Entry, type Info } from './api'
 import { Browser } from './Browser'
 import { Viewer } from './Viewer'
 import { TextViewer } from './TextViewer'
 import { UploadPanel, useUploads } from './Uploads'
-import { ActionSheet, Alert, KindIcon, Menu, type MenuSection, type SheetAction } from './ui'
-import {
-  CameraIcon,
-  ChevronLeft,
-  ChevronRight,
-  CloseIcon,
-  DownloadIcon,
-  EditIcon,
-  GridIcon,
-  ListIcon,
-  LogoutIcon,
-  MoreIcon,
-  NewFolderIcon,
-  PlusIcon,
-  SearchIcon,
-  TrashIcon,
-  UploadIcon,
-} from './icons'
+import { ActionSheet, Alert, Menu, type MenuSection, type SheetAction } from './ui'
+import { ChevronLeft, CloseIcon, EllipsisCircle, GridIcon, ListIcon, LogoutIcon, PlusIcon, SearchIcon, UploadIcon } from './icons'
 import {
   formatDate,
   formatSize,
-  hasThumb,
   hashFromPath,
   isMedia,
   joinPath,
@@ -136,7 +119,7 @@ export function App({ info, onLogout }: { info: Info; onLogout: () => void }) {
     if (dir === pathRef.current) refresh(dir, true)
   })
 
-  // ---- iOS navigation bar: glass once content scrolls under it, small
+  // ---- iOS navigation bar: frosted once content scrolls under it, small
   // title once the large title has scrolled away ----
 
   useEffect(() => {
@@ -216,11 +199,11 @@ export function App({ info, onLogout }: { info: Info; onLogout: () => void }) {
 
   function actionsFor(e: Entry): SheetAction[] {
     const list: SheetAction[] = []
-    if (e.isDir) list.push({ label: 'Open', icon: <ChevronRight size={20} />, onSelect: () => go(e.path) })
-    if (!e.isDir) list.push({ label: 'Download', icon: <DownloadIcon size={20} />, onSelect: () => triggerDownload(downloadURL(e.path)) })
+    if (e.isDir) list.push({ label: 'Open', onSelect: () => go(e.path) })
+    if (!e.isDir) list.push({ label: 'Download', onSelect: () => triggerDownload(downloadURL(e.path)) })
     if (!readOnly) {
-      list.push({ label: 'Rename', icon: <EditIcon size={20} />, onSelect: () => setDialog({ kind: 'rename', entry: e }) })
-      list.push({ label: 'Delete', icon: <TrashIcon size={20} />, danger: true, onSelect: () => setDialog({ kind: 'delete', entry: e }) })
+      list.push({ label: 'Rename', onSelect: () => setDialog({ kind: 'rename', entry: e }) })
+      list.push({ label: 'Delete', danger: true, onSelect: () => setDialog({ kind: 'delete', entry: e }) })
     }
     return list
   }
@@ -310,26 +293,24 @@ export function App({ info, onLogout }: { info: Info; onLogout: () => void }) {
 
   return (
     <div className={'app' + (searching ? ' is-searching' : '')}>
-      <div className="ambient" aria-hidden="true" />
-
       <header className={'navbar' + (scrolled || searching ? ' scrolled' : '')}>
         <div className="nav-side">
           {path && !searching && (
-            <button className="glass-btn glass" onClick={() => go(parentOf(path))} aria-label={`Back to ${parentName}`}>
-              <ChevronLeft size={22} />
+            <button className="nav-back" onClick={() => go(parentOf(path))} aria-label={`Back to ${parentName}`}>
+              <ChevronLeft size={28} />
+              <span>{parentName}</span>
             </button>
           )}
-          {!path && !searching && <img className="nav-logo" src="/icons/favicon-32.png" alt="" width={28} height={28} />}
         </div>
         <div className={'nav-title' + (titleHidden || searching ? ' shown' : '')}>{searching ? 'Search' : title}</div>
         <div className="nav-side right">
           {!searching && (
             <button
-              className="glass-btn glass"
+              className="nav-btn"
               aria-label="View and sort options"
               onClick={(e) => setViewMenu(e.currentTarget.getBoundingClientRect())}
             >
-              <MoreIcon size={20} />
+              <EllipsisCircle size={26} />
             </button>
           )}
         </div>
@@ -338,12 +319,6 @@ export function App({ info, onLogout }: { info: Info; onLogout: () => void }) {
       <main className={'content dir-' + direction} key={searching ? 'search' : path}>
         {!searching && (
           <div className="large-title">
-            {path && (
-              <button className="back-link" onClick={() => go(parentOf(path))}>
-                <ChevronLeft size={16} />
-                {parentName}
-              </button>
-            )}
             <h1 ref={largeTitle}>{title}</h1>
           </div>
         )}
@@ -382,7 +357,7 @@ export function App({ info, onLogout }: { info: Info; onLogout: () => void }) {
       </main>
 
       <div className="bottombar">
-        <label className={'searchbar glass' + (searching ? ' active' : '')} onClick={() => !searching && startSearch()}>
+        <label className={'searchbar material' + (searching ? ' active' : '')} onClick={() => !searching && startSearch()}>
           <SearchIcon size={18} />
           <input
             ref={searchInput}
@@ -401,12 +376,12 @@ export function App({ info, onLogout }: { info: Info; onLogout: () => void }) {
           )}
         </label>
         {searching ? (
-          <button className="glass-btn glass big" aria-label="Close search" onClick={endSearch}>
+          <button className="round-btn material" aria-label="Close search" onClick={endSearch}>
             <CloseIcon size={22} />
           </button>
         ) : (
           !readOnly && (
-            <button className="glass-btn glass big accent" aria-label="Add files or folder" onClick={() => setAddMenu(true)}>
+            <button className="round-btn material" aria-label="Add files or folder" onClick={() => setAddMenu(true)}>
               <PlusIcon size={26} />
             </button>
           )
@@ -425,11 +400,11 @@ export function App({ info, onLogout }: { info: Info; onLogout: () => void }) {
 
       <UploadPanel items={uploads.items} onCancel={uploads.cancelAll} onClear={uploads.clearFinished} />
       {toast && (
-        <div className="toast glass" key={toast} role="status">
+        <div className="toast material" key={toast} role="status">
           {toast}
         </div>
       )}
-      {dragging && <div className="dropzone glass">Drop to upload to “{title}”</div>}
+      {dragging && <div className="dropzone material">Drop to upload to “{title}”</div>}
 
       {viewer && (
         <Viewer
@@ -444,15 +419,22 @@ export function App({ info, onLogout }: { info: Info; onLogout: () => void }) {
 
       {viewMenu && <Menu anchor={viewMenu} sections={viewSections} onClose={() => setViewMenu(null)} />}
 
-      {menu && <ActionSheet header={<SheetHeader entry={menu} />} title={menu.name} actions={actionsFor(menu)} onClose={() => setMenu(null)} />}
+      {menu && (
+        <ActionSheet
+          title={menu.name}
+          message={[menu.isDir ? 'Folder' : formatSize(menu.size), formatDate(menu.modTime)].join(' · ')}
+          actions={actionsFor(menu)}
+          onClose={() => setMenu(null)}
+        />
+      )}
 
       {addMenu && (
         <ActionSheet
           title={`Add to ${title}`}
           actions={[
-            { label: 'Take Photo or Video', icon: <CameraIcon size={20} />, onSelect: () => cameraInput.current?.click() },
-            { label: 'Upload Files', icon: <UploadIcon size={20} />, onSelect: () => fileInput.current?.click() },
-            { label: 'New Folder', icon: <NewFolderIcon size={20} />, onSelect: () => setDialog({ kind: 'mkdir' }) },
+            { label: 'Take Photo or Video', onSelect: () => cameraInput.current?.click() },
+            { label: 'Upload Files', onSelect: () => fileInput.current?.click() },
+            { label: 'New Folder', onSelect: () => setDialog({ kind: 'mkdir' }) },
           ]}
           onClose={() => setAddMenu(false)}
         />
@@ -500,19 +482,6 @@ export function App({ info, onLogout }: { info: Info; onLogout: () => void }) {
           onClose={() => setDialog(null)}
         />
       )}
-    </div>
-  )
-}
-
-/** Thumbnail + name + details at the top of an item's action sheet. */
-function SheetHeader({ entry }: { entry: Entry }) {
-  return (
-    <div className="sheet-header">
-      <span className="sheet-thumb">{hasThumb(entry) ? <img src={thumbURL(entry)} alt="" /> : <KindIcon entry={entry} size={26} />}</span>
-      <span className="sheet-header-text">
-        <strong>{entry.name}</strong>
-        <span>{[entry.isDir ? 'Folder' : formatSize(entry.size), formatDate(entry.modTime)].join(' · ')}</span>
-      </span>
     </div>
   )
 }

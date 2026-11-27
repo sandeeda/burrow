@@ -17,7 +17,7 @@ $ burrow ~/Pictures
 
 ## What you get
 
-- 📱 **A phone app** you can add to your home screen (iPhone and Android), with an iOS-style "liquid glass" design.
+- 📱 **A phone app** you can add to your home screen (iPhone and Android). It looks and feels like your phone's own Photos and Files apps.
 - 🖼️ **Photos** in a grid with thumbnails and a swipeable viewer with pinch-zoom. **Videos** stream with seeking, even very large ones.
 - ⬆️ **Uploads** from your camera or files. Nothing is ever overwritten.
 - 🔎 **Search** by file name across the whole folder.
