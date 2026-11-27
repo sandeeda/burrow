@@ -100,6 +100,7 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 - Viewer shows 1280px previews instead of originals to save mobile data; "open original" is one tap away.
 - Uploads go one file at a time (more reliable on mobile than parallel).
 - No video thumbnails: would need ffmpeg. Videos show an icon + play badge.
+- UI theme (owner request, 2026-11-27): "liquid glass" with iOS feel and spring animations. Frosted translucent material (backdrop blur + saturation, edge highlights, sheen), iOS 26-style layout (large collapsing title, glass circle buttons, floating bottom search bar + add button), Photos-style grid, drag-to-dismiss sheets, iOS alerts, pull-down menu. Springs: pre-computed CSS `linear()` curves + a ~90-line JS spring (`web/src/spring.ts`) for gesture-driven motion — no animation library. Viewer: finger-following swipe with rubber-band, flick velocity, drag-down to close, pinch + double-tap zoom with momentum pan. Light and dark follow the system setting automatically. Respects Reduce Motion and Reduce Transparency.
 
 ## Known issues
 - **No login yet (Phase 3).** Anyone on the owner's tailnet (his own devices) can use the API. Localhost is protected from websites by the Host check + CSRF guards.

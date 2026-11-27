@@ -1,25 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, downloadURL, type Entry, type Info } from './api'
+import { api, downloadURL, thumbURL, type Entry, type Info } from './api'
 import { Browser } from './Browser'
 import { Viewer } from './Viewer'
 import { TextViewer } from './TextViewer'
 import { UploadPanel, useUploads } from './Uploads'
-import { ActionSheet, Dialog, type SheetAction } from './ui'
+import { ActionSheet, Alert, KindIcon, Menu, type MenuSection, type SheetAction } from './ui'
 import {
   CameraIcon,
+  ChevronLeft,
+  ChevronRight,
   CloseIcon,
   DownloadIcon,
   EditIcon,
   GridIcon,
   ListIcon,
+  MoreIcon,
   NewFolderIcon,
   PlusIcon,
   SearchIcon,
-  SortIcon,
   TrashIcon,
   UploadIcon,
 } from './icons'
 import {
+  formatDate,
+  formatSize,
+  hasThumb,
   hashFromPath,
   isMedia,
   joinPath,
@@ -36,38 +41,40 @@ import {
 
 const SORTS = ['name', 'newest', 'largest'] as const
 const VIEWS = ['grid', 'list'] as const
-const SORT_LABEL: Record<SortKey, string> = { name: 'Name', newest: 'Newest', largest: 'Largest' }
 
-type DialogState =
-  | { kind: 'rename'; entry: Entry }
-  | { kind: 'delete'; entry: Entry }
-  | { kind: 'mkdir' }
-  | null
+type DialogState = { kind: 'rename'; entry: Entry } | { kind: 'delete'; entry: Entry } | { kind: 'mkdir' } | null
 
 export function App() {
   const [info, setInfo] = useState<Info | null>(null)
   const [path, setPath] = useState(() => pathFromHash(location.hash))
+  const [direction, setDirection] = useState<'forward' | 'back' | 'none'>('none')
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [error, setError] = useState('')
   const [sort, setSort] = useState<SortKey>(() => load('burrow.sort', SORTS, 'name'))
   const [view, setView] = useState<'grid' | 'list'>(() => load('burrow.view', VIEWS, 'grid'))
   const [query, setQuery] = useState('')
-  const [searchOpen, setSearchOpen] = useState(false)
+  const [searching, setSearching] = useState(false)
   const [results, setResults] = useState<Entry[] | null>(null)
   const [viewer, setViewer] = useState<{ items: Entry[]; index: number } | null>(null)
   const [textEntry, setTextEntry] = useState<Entry | null>(null)
   const [menu, setMenu] = useState<Entry | null>(null)
   const [addMenu, setAddMenu] = useState(false)
+  const [viewMenu, setViewMenu] = useState<DOMRect | null>(null)
   const [dialog, setDialog] = useState<DialogState>(null)
   const [toast, setToast] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+  const [titleHidden, setTitleHidden] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const cameraInput = useRef<HTMLInputElement>(null)
+  const searchInput = useRef<HTMLInputElement>(null)
+  const largeTitle = useRef<HTMLHeadingElement>(null)
   const readOnly = info?.readOnly ?? true
+  const rootName = info?.name ?? 'Burrow'
 
   const flash = useCallback((msg: string) => {
     setToast(msg)
-    window.setTimeout(() => setToast((t) => (t === msg ? '' : t)), 3500)
+    window.setTimeout(() => setToast((t) => (t === msg ? '' : t)), 3000)
   }, [])
 
   // ---- data ----
@@ -93,9 +100,13 @@ export function App() {
 
   useEffect(() => {
     const onHash = () => {
-      setPath(pathFromHash(location.hash))
+      const next = pathFromHash(location.hash)
+      const prev = pathRef.current
+      setDirection(next.length > prev.length && next.startsWith(prev) ? 'forward' : 'back')
+      setPath(next)
       setQuery('')
-      setSearchOpen(false)
+      setSearching(false)
+      window.scrollTo(0, 0)
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
@@ -114,7 +125,7 @@ export function App() {
         (r) => setResults(r.results),
         (e) => !ctl.signal.aborted && flash(e.message),
       )
-    }, 250)
+    }, 200)
     return () => {
       window.clearTimeout(t)
       ctl.abort()
@@ -129,11 +140,43 @@ export function App() {
     if (dir === pathRef.current) refresh(dir, true)
   })
 
+  // ---- iOS navigation bar: glass once content scrolls under it, small
+  // title once the large title has scrolled away ----
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 2)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  useEffect(() => {
+    const el = largeTitle.current
+    if (!el) return
+    const io = new IntersectionObserver(([e]) => setTitleHidden(!e.isIntersecting), { rootMargin: '-60px 0px 0px 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [searching, path])
+
+  // Keep the bottom bar above the on-screen keyboard.
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const update = () => {
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      document.documentElement.style.setProperty('--kb', `${inset}px`)
+    }
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+    }
+  }, [])
+
   // ---- navigation ----
 
   const go = (p: string) => {
-    setQuery('')
-    setSearchOpen(false)
     location.hash = hashFromPath(p)
   }
 
@@ -163,10 +206,21 @@ export function App() {
     triggerDownload(downloadURL(e.path))
   }
 
+  const startSearch = () => {
+    setSearching(true)
+    requestAnimationFrame(() => searchInput.current?.focus())
+  }
+  const endSearch = () => {
+    setQuery('')
+    setSearching(false)
+    searchInput.current?.blur()
+  }
+
   // ---- actions ----
 
   function actionsFor(e: Entry): SheetAction[] {
     const list: SheetAction[] = []
+    if (e.isDir) list.push({ label: 'Open', icon: <ChevronRight size={20} />, onSelect: () => go(e.path) })
     if (!e.isDir) list.push({ label: 'Download', icon: <DownloadIcon size={20} />, onSelect: () => triggerDownload(downloadURL(e.path)) })
     if (!readOnly) {
       list.push({ label: 'Rename', icon: <EditIcon size={20} />, onSelect: () => setDialog({ kind: 'rename', entry: e }) })
@@ -175,7 +229,7 @@ export function App() {
     return list
   }
 
-  // After a rename/delete, keep the open viewer in sync.
+  // After a rename/delete, keep the open viewer and search results in sync.
   function afterChange(oldPath: string, updated: Entry | null) {
     setViewer((v) => {
       if (!v) return v
@@ -233,127 +287,132 @@ export function App() {
   // ---- render ----
 
   const crumbs = path ? path.split('/') : []
-  const searching = query.trim() !== ''
-  const list = searching ? (results ?? []) : sorted
-  const nextSort = () => {
-    const s = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.length]
-    setSort(s)
-    save('burrow.sort', s)
-  }
-  const toggleView = () => {
-    const v = view === 'grid' ? 'list' : 'grid'
-    setView(v)
-    save('burrow.view', v)
-  }
+  const title = crumbs.length ? crumbs[crumbs.length - 1] : rootName
+  const parentName = crumbs.length > 1 ? crumbs[crumbs.length - 2] : rootName
+  const showResults = searching && query.trim() !== ''
+  const list = showResults ? (results ?? []) : sorted
+
+  const viewSections: MenuSection[] = [
+    {
+      items: [
+        { label: 'Grid', checked: view === 'grid', icon: <GridIcon size={18} />, onSelect: () => (setView('grid'), save('burrow.view', 'grid')) },
+        { label: 'List', checked: view === 'list', icon: <ListIcon size={18} />, onSelect: () => (setView('list'), save('burrow.view', 'list')) },
+      ],
+    },
+    {
+      title: 'Sort by',
+      items: SORTS.map((s) => ({
+        label: { name: 'Name', newest: 'Date', largest: 'Size' }[s],
+        checked: sort === s,
+        onSelect: () => (setSort(s), save('burrow.sort', s)),
+      })),
+    },
+  ]
 
   return (
-    <div className="app">
-      <header className="top">
-        {searchOpen ? (
-          <div className="search">
-            <SearchIcon size={20} />
-            <input
-              autoFocus
-              type="search"
-              placeholder="Search file names"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              enterKeyHint="search"
-              aria-label="Search file names"
-            />
+    <div className={'app' + (searching ? ' is-searching' : '')}>
+      <div className="ambient" aria-hidden="true" />
+
+      <header className={'navbar' + (scrolled || searching ? ' scrolled' : '')}>
+        <div className="nav-side">
+          {path && !searching && (
+            <button className="glass-btn glass" onClick={() => go(parentOf(path))} aria-label={`Back to ${parentName}`}>
+              <ChevronLeft size={22} />
+            </button>
+          )}
+          {!path && !searching && <img className="nav-logo" src="/icons/favicon-32.png" alt="" width={28} height={28} />}
+        </div>
+        <div className={'nav-title' + (titleHidden || searching ? ' shown' : '')}>{searching ? 'Search' : title}</div>
+        <div className="nav-side right">
+          {!searching && (
             <button
-              className="icon-btn"
-              aria-label="Close search"
-              onClick={() => {
-                setQuery('')
-                setSearchOpen(false)
-              }}
+              className="glass-btn glass"
+              aria-label="View and sort options"
+              onClick={(e) => setViewMenu(e.currentTarget.getBoundingClientRect())}
             >
-              <CloseIcon size={20} />
+              <MoreIcon size={20} />
             </button>
-          </div>
-        ) : (
-          <>
-            <button className="brand" onClick={() => go('')} aria-label="Go to top folder">
-              <img src="/icons/favicon-32.png" alt="" width={26} height={26} />
-              <span>{info?.name ?? 'Burrow'}</span>
-            </button>
-            <div className="top-actions">
-              <button className="icon-btn" aria-label="Search" onClick={() => setSearchOpen(true)}>
-                <SearchIcon />
-              </button>
-            </div>
-          </>
-        )}
+          )}
+        </div>
       </header>
 
-      {!searching && (
-        <nav className="toolbar" aria-label="Folder">
-          <ol className="crumbs">
-            <li>
-              <button onClick={() => go('')} aria-current={path === '' ? 'page' : undefined}>
-                {info?.name ?? 'Home'}
+      <main className={'content dir-' + direction} key={searching ? 'search' : path}>
+        {!searching && (
+          <div className="large-title">
+            {path && (
+              <button className="back-link" onClick={() => go(parentOf(path))}>
+                <ChevronLeft size={16} />
+                {parentName}
               </button>
-            </li>
-            {crumbs.map((c, i) => {
-              const p = crumbs.slice(0, i + 1).join('/')
-              return (
-                <li key={p}>
-                  <button onClick={() => go(p)} aria-current={p === path ? 'page' : undefined}>
-                    {c}
-                  </button>
-                </li>
-              )
-            })}
-          </ol>
-          <button className="chip" onClick={nextSort} aria-label={`Sort: ${SORT_LABEL[sort]}`}>
-            <SortIcon size={16} />
-            {SORT_LABEL[sort]}
-          </button>
-          <button className="icon-btn" onClick={toggleView} aria-label={view === 'grid' ? 'Show as list' : 'Show as grid'}>
-            {view === 'grid' ? <ListIcon size={20} /> : <GridIcon size={20} />}
-          </button>
-        </nav>
-      )}
+            )}
+            <h1 ref={largeTitle}>{title}</h1>
+          </div>
+        )}
 
-      <main className="content">
         {error && (
           <div className="empty">
             <p>{error}</p>
-            <button className="btn" onClick={() => refresh(path)}>
+            <button className="pill" onClick={() => refresh(path)}>
               Try again
             </button>
           </div>
         )}
-        {!error && searching && results !== null && !results.length && <p className="empty">No files named like “{query.trim()}”.</p>}
-        {!error && !searching && entries === null && <p className="empty">Loading…</p>}
+        {!error && showResults && results !== null && !results.length && <p className="empty">No files named like “{query.trim()}”.</p>}
+        {!error && searching && !query.trim() && <p className="empty hint">Search every file name in {rootName}.</p>}
+        {!error && !searching && entries === null && <Skeleton />}
         {!error && !searching && entries !== null && !entries.length && (
           <div className="empty">
             <p>This folder is empty.</p>
             {!readOnly && (
-              <button className="btn primary" onClick={() => fileInput.current?.click()}>
+              <button className="pill accent" onClick={() => fileInput.current?.click()}>
                 <UploadIcon size={18} /> Upload files
               </button>
             )}
           </div>
         )}
-        {!error && list.length > 0 && (
+        {!error && list.length > 0 && (!searching || showResults) && (
           <Browser
             entries={list}
-            view={searching ? 'list' : view}
-            showFolder={searching}
-            resetKey={searching ? 'search:' + query : path + ':' + sort}
+            view={showResults ? 'list' : view}
+            showFolder={showResults}
+            resetKey={showResults ? 'search:' + query : path + ':' + sort + ':' + view}
             onOpen={(e) => open(e, list)}
             onMenu={setMenu}
           />
         )}
       </main>
 
-      {!readOnly && !searching && (
-        <button className="fab" aria-label="Add files or folder" onClick={() => setAddMenu(true)}>
-          <PlusIcon size={28} />
-        </button>
-      )}
+      <div className="bottombar">
+        <label className={'searchbar glass' + (searching ? ' active' : '')} onClick={() => !searching && startSearch()}>
+          <SearchIcon size={18} />
+          <input
+            ref={searchInput}
+            type="search"
+            placeholder="Search"
+            value={query}
+            onFocus={() => setSearching(true)}
+            onChange={(e) => setQuery(e.target.value)}
+            enterKeyHint="search"
+            aria-label="Search file names"
+          />
+          {query && (
+            <button className="clear" aria-label="Clear search" onClick={() => setQuery('')}>
+              <CloseIcon size={14} />
+            </button>
+          )}
+        </label>
+        {searching ? (
+          <button className="glass-btn glass big" aria-label="Close search" onClick={endSearch}>
+            <CloseIcon size={22} />
+          </button>
+        ) : (
+          !readOnly && (
+            <button className="glass-btn glass big accent" aria-label="Add files or folder" onClick={() => setAddMenu(true)}>
+              <PlusIcon size={26} />
+            </button>
+          )
+        )}
+      </div>
 
       <input ref={fileInput} type="file" multiple hidden onChange={(e) => (startUpload(e.target.files), (e.target.value = ''))} />
       <input
@@ -366,8 +425,12 @@ export function App() {
       />
 
       <UploadPanel items={uploads.items} onCancel={uploads.cancelAll} onClear={uploads.clearFinished} />
-      {toast && <div className="toast">{toast}</div>}
-      {dragging && <div className="dropzone">Drop to upload to “{path ? crumbs[crumbs.length - 1] : (info?.name ?? 'Burrow')}”</div>}
+      {toast && (
+        <div className="toast glass" key={toast} role="status">
+          {toast}
+        </div>
+      )}
+      {dragging && <div className="dropzone glass">Drop to upload to “{title}”</div>}
 
       {viewer && (
         <Viewer
@@ -380,24 +443,28 @@ export function App() {
       )}
       {textEntry && <TextViewer entry={textEntry} onClose={closeOverlay} />}
 
-      {menu && <ActionSheet title={menu.name} actions={[...(menu.isDir ? [{ label: 'Open', onSelect: () => go(menu.path) }] : []), ...actionsFor(menu)]} onClose={() => setMenu(null)} />}
+      {viewMenu && <Menu anchor={viewMenu} sections={viewSections} onClose={() => setViewMenu(null)} />}
+
+      {menu && <ActionSheet header={<SheetHeader entry={menu} />} title={menu.name} actions={actionsFor(menu)} onClose={() => setMenu(null)} />}
 
       {addMenu && (
         <ActionSheet
+          title={`Add to ${title}`}
           actions={[
-            { label: 'Upload files', icon: <UploadIcon size={20} />, onSelect: () => fileInput.current?.click() },
-            { label: 'Take photo or video', icon: <CameraIcon size={20} />, onSelect: () => cameraInput.current?.click() },
-            { label: 'New folder', icon: <NewFolderIcon size={20} />, onSelect: () => setDialog({ kind: 'mkdir' }) },
+            { label: 'Take Photo or Video', icon: <CameraIcon size={20} />, onSelect: () => cameraInput.current?.click() },
+            { label: 'Upload Files', icon: <UploadIcon size={20} />, onSelect: () => fileInput.current?.click() },
+            { label: 'New Folder', icon: <NewFolderIcon size={20} />, onSelect: () => setDialog({ kind: 'mkdir' }) },
           ]}
           onClose={() => setAddMenu(false)}
         />
       )}
 
       {dialog?.kind === 'mkdir' && (
-        <Dialog
-          title="New folder"
+        <Alert
+          title="New Folder"
+          message={`Create a folder in “${title}”.`}
           confirmLabel="Create"
-          input={{ initial: '', placeholder: 'Folder name' }}
+          input={{ initial: '', placeholder: 'Name' }}
           onConfirm={async (name) => {
             await api.mkdir(joinPath(path, name))
             refresh(path, true)
@@ -406,9 +473,9 @@ export function App() {
         />
       )}
       {dialog?.kind === 'rename' && (
-        <Dialog
-          title={`Rename ${dialog.entry.isDir ? 'folder' : 'file'}`}
-          confirmLabel="Rename"
+        <Alert
+          title="Rename"
+          confirmLabel="Save"
           input={{ initial: dialog.entry.name, selectTo: dialog.entry.isDir ? undefined : splitExt(dialog.entry.name)[0].length }}
           onConfirm={async (name) => {
             if (name === dialog.entry.name) return
@@ -420,13 +487,9 @@ export function App() {
         />
       )}
       {dialog?.kind === 'delete' && (
-        <Dialog
+        <Alert
           title={`Delete “${dialog.entry.name}”?`}
-          message={
-            <>
-              It moves to Burrow's trash on your PC{dialog.entry.isDir ? ', with everything inside it' : ''}. You can still recover it from there.
-            </>
-          }
+          message={`It moves to Burrow's trash on your PC${dialog.entry.isDir ? ', with everything inside it' : ''}, so you can still recover it.`}
           confirmLabel="Delete"
           danger
           onConfirm={async () => {
@@ -439,5 +502,31 @@ export function App() {
         />
       )}
     </div>
+  )
+}
+
+/** Thumbnail + name + details at the top of an item's action sheet. */
+function SheetHeader({ entry }: { entry: Entry }) {
+  return (
+    <div className="sheet-header">
+      <span className="sheet-thumb">{hasThumb(entry) ? <img src={thumbURL(entry)} alt="" /> : <KindIcon entry={entry} size={26} />}</span>
+      <span className="sheet-header-text">
+        <strong>{entry.name}</strong>
+        <span>{[entry.isDir ? 'Folder' : formatSize(entry.size), formatDate(entry.modTime)].join(' · ')}</span>
+      </span>
+    </div>
+  )
+}
+
+/** Shimmering placeholder tiles while a folder loads. */
+function Skeleton() {
+  return (
+    <ul className="grid skeleton" aria-label="Loading">
+      {Array.from({ length: 18 }, (_, i) => (
+        <li key={i}>
+          <span className="tile" />
+        </li>
+      ))}
+    </ul>
   )
 }

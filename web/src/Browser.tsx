@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { thumbURL, type Entry } from './api'
 import { KindIcon, useLongPress } from './ui'
-import { MoreIcon, PlayBadge } from './icons'
+import { ChevronRight, PlayBadge } from './icons'
 import { formatDate, formatSize, hasThumb, kindOf, parentOf } from './util'
 
 const PAGE = 150
@@ -39,49 +39,81 @@ export function Browser({ entries, view, showFolder, onOpen, onMenu, resetKey }:
   return (
     <>
       {view === 'grid' ? (
-        <ul className="grid">
-          {shown.map((e) => (
-            <Tile key={e.path} entry={e} onOpen={onOpen} onMenu={onMenu} />
+        <ul className="grid" key={resetKey}>
+          {shown.map((e, i) => (
+            <Tile key={e.path} entry={e} delay={i < 40 ? i : 0} onOpen={onOpen} onMenu={onMenu} />
           ))}
         </ul>
       ) : (
-        <ul className="list">
+        <ul className="list glass-card" key={resetKey}>
           {shown.map((e) => (
             <Row key={e.path} entry={e} showFolder={showFolder} onOpen={onOpen} onMenu={onMenu} />
           ))}
         </ul>
       )}
       {count < entries.length && <div ref={sentinel} className="sentinel" aria-hidden="true" />}
+      {count >= entries.length && <Summary entries={entries} />}
     </>
   )
+}
+
+/** "38 Photos, 3 Videos" footer, like the Photos app. */
+function Summary({ entries }: { entries: Entry[] }) {
+  const counts = { folder: 0, image: 0, video: 0, other: 0 }
+  for (const e of entries) {
+    const k = kindOf(e)
+    if (k === 'folder' || k === 'image' || k === 'video') counts[k]++
+    else counts.other++
+  }
+  const part = (n: number, one: string, many: string) => (n ? `${n.toLocaleString()} ${n === 1 ? one : many}` : null)
+  const text = [
+    part(counts.folder, 'Folder', 'Folders'),
+    part(counts.image, 'Photo', 'Photos'),
+    part(counts.video, 'Video', 'Videos'),
+    part(counts.other, 'File', 'Files'),
+  ]
+    .filter(Boolean)
+    .join(', ')
+  return <p className="summary">{text}</p>
 }
 
 type ItemProps = { entry: Entry; onOpen: (e: Entry) => void; onMenu: (e: Entry) => void }
 
 function Thumb({ entry, size }: { entry: Entry; size: number }) {
-  const [failed, setFailed] = useState(false)
-  if (hasThumb(entry) && !failed) {
-    return <img src={thumbURL(entry)} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setFailed(true)} />
+  const [state, setState] = useState<'loading' | 'ok' | 'failed'>('loading')
+  if (hasThumb(entry) && state !== 'failed') {
+    return (
+      <img
+        className={state === 'ok' ? 'in' : ''}
+        src={thumbURL(entry)}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+        onLoad={() => setState('ok')}
+        onError={() => setState('failed')}
+      />
+    )
   }
   return <KindIcon entry={entry} size={size} />
 }
 
-function Tile({ entry, onOpen, onMenu }: ItemProps) {
+function Tile({ entry, delay, onOpen, onMenu }: ItemProps & { delay: number }) {
   const lp = useLongPress(() => onMenu(entry))
   const kind = kindOf(entry)
+  const photo = hasThumb(entry)
   return (
-    <li>
+    <li style={{ '--i': delay } as React.CSSProperties}>
       <button
-        className={'tile' + (hasThumb(entry) ? ' has-thumb' : '')}
+        className={'tile' + (photo ? ' photo' : ' doc')}
         onClick={() => !lp.consumed() && onOpen(entry)}
+        aria-label={entry.name}
         title={entry.name}
         {...lp.handlers}
       >
-        <span className="tile-media">
-          <Thumb entry={entry} size={40} />
-          {kind === 'video' && <PlayBadge className="badge" />}
-        </span>
-        <span className="tile-name">{entry.name}</span>
+        <Thumb entry={entry} size={photo ? 32 : 44} />
+        {kind === 'video' && <PlayBadge className="badge" size={24} />}
+        {!photo && <span className="tile-name">{entry.name}</span>}
       </button>
     </li>
   )
@@ -100,14 +132,17 @@ function Row({ entry, showFolder, onOpen, onMenu }: ItemProps & { showFolder?: b
         <span className="row-text">
           <span className="row-name">{entry.name}</span>
           <span className="row-meta">
-            {showFolder && <span className="row-folder">{folder ? `in ${folder}` : 'in top folder'} · </span>}
+            {showFolder && <span>{folder ? `in ${folder}` : 'in top folder'} · </span>}
             {meta}
           </span>
         </span>
+        {entry.isDir && <ChevronRight size={18} className="row-chevron" />}
       </button>
-      <button className="icon-btn" aria-label={`More actions for ${entry.name}`} onClick={() => onMenu(entry)}>
-        <MoreIcon />
-      </button>
+      {!entry.isDir && (
+        <button className="row-more" aria-label={`More actions for ${entry.name}`} onClick={() => onMenu(entry)}>
+          •••
+        </button>
+      )}
     </li>
   )
 }

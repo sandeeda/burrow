@@ -162,3 +162,8 @@ export const PlayBadge = (p: P) => (
     <path d="m11 8.5 9 5.5-9 5.5z" fill="#fff" />
   </svg>
 )
+export const CheckIcon = (p: P) => (
+  <Svg {...p}>
+    <path d="m5 12.5 4.5 4.5L19 7.5" />
+  </Svg>
+)
