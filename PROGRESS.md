@@ -7,7 +7,7 @@ Phase 2 ✅ DONE (2026-11-27): owner tested on phone — installed, browsing, ph
 
 Phase 1 ✅ DONE (2026-11-27): all tests + fuzzing green in CI on Linux and Windows (run 45930813599).
 
-Phase 0 ✅ DONE (2026-11-26): owner saw "Hello from Burrow" on phone over mobile data at https://burrow.taile8ab63.ts.net.
+Phase 0 ✅ DONE (2026-11-26): owner saw "Hello from Burrow" on phone over mobile data at the tailnet address (https://burrow.<tailnet>.ts.net).
 
 ## How to run (dev)
 ```
