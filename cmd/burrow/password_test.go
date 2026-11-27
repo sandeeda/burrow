@@ -66,10 +66,14 @@ func TestExistingPasswordNotAsked(t *testing.T) {
 	}
 }
 
-func TestNoTerminalNoPassword(t *testing.T) {
-	err := ensurePassword(newAM(t), &config.Config{}, nil, io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "--password-file") {
+func TestNoTerminalDefersToBrowserSetup(t *testing.T) {
+	am := newAM(t)
+	var out strings.Builder
+	if err := ensurePassword(am, &config.Config{}, nil, &out); err != nil {
 		t.Fatalf("err = %v", err)
+	}
+	if am.HasPassword() || !strings.Contains(out.String(), "phone") {
+		t.Errorf("hasPassword=%v out=%q", am.HasPassword(), out.String())
 	}
 }
 
@@ -115,5 +119,13 @@ func TestPasswordFile(t *testing.T) {
 	}
 	if err := ensurePassword(newAM(t), &config.Config{PasswordFile: filepath.Join(dir, "missing")}, nil, io.Discard); err == nil {
 		t.Error("missing file accepted")
+	}
+}
+
+func TestResetWithoutTerminalFails(t *testing.T) {
+	am := newAM(t)
+	am.SetPassword("old-password")
+	if err := ensurePassword(am, &config.Config{ResetPassword: true}, nil, io.Discard); err == nil {
+		t.Fatal("reset without a terminal should fail loudly, not be ignored")
 	}
 }

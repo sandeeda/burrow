@@ -16,10 +16,13 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/term"
+	"tailscale.com/client/local"
 	"tailscale.com/logtail"
+	"tailscale.com/tailcfg"
 	"tailscale.com/tsnet"
 
 	"github.com/sandeeda/burrow/internal/api"
@@ -91,10 +94,15 @@ func run(cfg *config.Config) error {
 	defer ix.Close()
 	go ix.Run(ctx, rescanInterval)
 
+	// Filled in once Tailscale is up; used to let the owner's own devices
+	// choose the first password from the browser.
+	var owner atomic.Pointer[tailnetOwner]
+
 	srv := api.New(api.Options{
 		Jail:     jail,
 		Index:    ix,
 		Auth:     am,
+		CanSetUp: func(r *http.Request) bool { return owner.Load().owns(r) },
 		Thumbs:   thumbs.New(jail, filepath.Join(dataDir, "thumbs"), thumbWorkers()),
 		UI:       web.Dist(),
 		TrashDir: filepath.Join(dataDir, "trash"),
@@ -139,9 +147,12 @@ func run(cfg *config.Config) error {
 	}
 	defer ts.Close()
 
-	dnsName, err := waitForTailscale(ctx, ts)
+	dnsName, self, err := waitForTailscale(ctx, ts)
 	if err != nil {
 		return err
+	}
+	if lc, err := ts.LocalClient(); err == nil {
+		owner.Store(&tailnetOwner{lc: lc, user: self})
 	}
 	tlsLn, err := listenTLSWithRetry(ctx, ts)
 	if err != nil {
@@ -200,15 +211,37 @@ func indexFileName(folder string) string {
 	return "index-" + hex.EncodeToString(sum[:8]) + ".db"
 }
 
+// tailnetOwner identifies the Tailscale account this PC is signed in to.
+type tailnetOwner struct {
+	lc   *local.Client
+	user tailcfg.UserID
+}
+
+// owns reports whether a request comes from a device signed in to the same
+// Tailscale account as this PC (not a tagged server, not a device shared
+// from someone else's tailnet).
+func (o *tailnetOwner) owns(r *http.Request) bool {
+	if o == nil || o.user.IsZero() {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	who, err := o.lc.WhoIs(ctx, r.RemoteAddr)
+	if err != nil || who.Node == nil || who.UserProfile == nil || who.Node.IsTagged() {
+		return false
+	}
+	return who.UserProfile.ID == o.user
+}
+
 // waitForTailscale starts tsnet, prints the login URL if the device is not yet
-// approved, and returns this node's MagicDNS name once it is connected.
-func waitForTailscale(ctx context.Context, ts *tsnet.Server) (string, error) {
+// approved, and returns this node's MagicDNS name and owner once connected.
+func waitForTailscale(ctx context.Context, ts *tsnet.Server) (string, tailcfg.UserID, error) {
 	if err := ts.Start(); err != nil {
-		return "", fmt.Errorf("start tailscale: %w", err)
+		return "", 0, fmt.Errorf("start tailscale: %w", err)
 	}
 	lc, err := ts.LocalClient()
 	if err != nil {
-		return "", fmt.Errorf("tailscale local client: %w", err)
+		return "", 0, fmt.Errorf("tailscale local client: %w", err)
 	}
 
 	fmt.Println("🔌 Connecting to Tailscale…")
@@ -217,9 +250,9 @@ func waitForTailscale(ctx context.Context, ts *tsnet.Server) (string, error) {
 		st, err := lc.Status(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
-				return "", ctx.Err()
+				return "", 0, ctx.Err()
 			}
-			return "", fmt.Errorf("tailscale status: %w", err)
+			return "", 0, fmt.Errorf("tailscale status: %w", err)
 		}
 		if st.AuthURL != "" && st.AuthURL != shownURL {
 			shownURL = st.AuthURL
@@ -230,11 +263,11 @@ func waitForTailscale(ctx context.Context, ts *tsnet.Server) (string, error) {
 			fmt.Printf("   %s\n\n", st.AuthURL)
 		}
 		if st.BackendState == "Running" && st.Self != nil {
-			return strings.TrimSuffix(st.Self.DNSName, "."), nil
+			return strings.TrimSuffix(st.Self.DNSName, "."), st.Self.UserID, nil
 		}
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return "", 0, ctx.Err()
 		case <-time.After(500 * time.Millisecond):
 		}
 	}

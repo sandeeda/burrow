@@ -2,8 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, setCsrf, UNAUTHORIZED_EVENT, type Info, type Session } from './api'
 import { App } from './App'
 import { Login } from './Login'
+import { Setup } from './Setup'
 
-type State = { kind: 'checking' } | { kind: 'offline'; message: string } | { kind: 'out' } | { kind: 'in'; info: Info }
+type State =
+  | { kind: 'checking' }
+  | { kind: 'offline'; message: string }
+  | { kind: 'setup' }
+  | { kind: 'setup-blocked' }
+  | { kind: 'out' }
+  | { kind: 'in'; info: Info }
 
 /** Decides between the login screen and the app. */
 export function Root() {
@@ -15,7 +22,7 @@ export function Root() {
       setState({ kind: 'in', info: { name: s.name ?? 'Burrow', readOnly: s.readOnly } })
     } else {
       setCsrf('')
-      setState({ kind: 'out' })
+      setState({ kind: s.needsSetup ? 'setup' : s.setupBlocked ? 'setup-blocked' : 'out' })
     }
   }, [])
 
@@ -61,6 +68,24 @@ export function Root() {
             <img className="login-icon" src="/icons/icon-192.png" alt="" width={84} height={84} />
             <h1>Can't reach your PC</h1>
             <p className="login-sub">{state.message}</p>
+            <button className="pill accent login-btn" onClick={check}>
+              Try Again
+            </button>
+          </div>
+        </div>
+      )
+    case 'setup':
+      return <Setup onDone={accept} />
+    case 'setup-blocked':
+      return (
+        <div className="login">
+          <div className="login-card">
+            <img className="login-icon" src="/icons/icon-192.png" alt="" width={84} height={84} />
+            <h1>Not Set Up Yet</h1>
+            <p className="login-sub">
+              Burrow doesn't have a password yet. Open it from a device signed in to the same Tailscale account as the PC, or run
+              burrow in a terminal on the PC.
+            </p>
             <button className="pill accent login-btn" onClick={check}>
               Try Again
             </button>

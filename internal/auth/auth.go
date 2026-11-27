@@ -119,6 +119,29 @@ func (m *Manager) SetPassword(pw string) error {
 	return m.saveSessionsLocked()
 }
 
+// ErrAlreadySetUp is returned by SetPasswordIfUnset when a password exists.
+var ErrAlreadySetUp = errors.New("auth: a password is already set")
+
+// SetPasswordIfUnset sets the first password. It fails with ErrAlreadySetUp
+// if one exists, so two devices racing through first-time setup can't both
+// win.
+func (m *Manager) SetPasswordIfUnset(pw string) error {
+	h, err := HashPassword(pw)
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.hash != "" {
+		return ErrAlreadySetUp
+	}
+	if err := writeJSON(m.path("password.json"), passwordFile{Hash: h, SetAt: m.now().UTC()}); err != nil {
+		return err
+	}
+	m.hash = h
+	return nil
+}
+
 // Login checks the password and, if right, creates a session. It returns the
 // cookie token (shown to the client once, never stored) and the session.
 // client identifies the caller for rate limiting (e.g. its IP).

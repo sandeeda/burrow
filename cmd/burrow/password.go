@@ -48,8 +48,15 @@ func ensurePassword(am *auth.Manager, cfg *config.Config, prompt passwordPrompte
 	if am.HasPassword() && !cfg.ResetPassword {
 		return nil
 	}
+	if prompt == nil && cfg.ResetPassword {
+		return errors.New("--reset-password needs a terminal to type the new password (or use --password-file)")
+	}
 	if prompt == nil {
-		return errors.New("no login password set yet. Run burrow once in a terminal to create one, or pass --password-file")
+		// No terminal (a service, or started remotely): the owner chooses the
+		// password on first visit from one of their own devices.
+		fmt.Fprintln(out, "🔐 No password yet. Open Burrow on your phone (signed in to this PC's")
+		fmt.Fprintln(out, "   Tailscale account) and choose one there — or run burrow in a terminal.")
+		return nil
 	}
 
 	if cfg.ResetPassword {

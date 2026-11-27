@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -288,5 +289,46 @@ func TestMaxSessions(t *testing.T) {
 	}
 	if _, ok := m.Validate(first); ok {
 		t.Error("oldest session not evicted")
+	}
+}
+
+func TestSetPasswordIfUnset(t *testing.T) {
+	m, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetPasswordIfUnset("short"); !errors.Is(err, ErrWeakPassword) {
+		t.Errorf("weak: %v", err)
+	}
+	if err := m.SetPasswordIfUnset("first-password"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetPasswordIfUnset("second-password"); !errors.Is(err, ErrAlreadySetUp) {
+		t.Errorf("second setup = %v, want ErrAlreadySetUp", err)
+	}
+	if _, _, err := m.Login("first-password", false, "c"); err != nil {
+		t.Errorf("first password lost: %v", err)
+	}
+}
+
+func TestSetPasswordIfUnsetRace(t *testing.T) {
+	m, _ := Open(t.TempDir())
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	wins := 0
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if m.SetPasswordIfUnset(fmt.Sprintf("password-%d", i)) == nil {
+				mu.Lock()
+				wins++
+				mu.Unlock()
+			}
+		}(i)
+	}
+	wg.Wait()
+	if wins != 1 {
+		t.Errorf("%d setups succeeded, want exactly 1", wins)
 	}
 }

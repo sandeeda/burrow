@@ -1110,3 +1110,102 @@ func TestHSTSOnlyOverHTTPS(t *testing.T) {
 		t.Errorf("HSTS over HTTPS = %q", h)
 	}
 }
+
+// ---- first-time setup from the browser ----
+
+// setupEnv is an env whose Burrow has no password yet.
+func setupEnv(t *testing.T, canSetUp func(*http.Request) bool) *env {
+	e := newEnv(t, false)
+	am, err := auth.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(Options{Jail: e.ix.Jail(), Index: e.ix, Auth: am, CanSetUp: canSetUp, TrashDir: e.trash, Logf: t.Logf})
+	e.h, e.am, e.cookie, e.csrf = s.Handler(testHost), am, nil, ""
+	return e
+}
+
+func (e *env) setup(remote, password string) *httptest.ResponseRecorder {
+	b, _ := json.Marshal(map[string]any{"password": password, "remember": true})
+	req := httptest.NewRequest(http.MethodPost, "/api/setup", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = remote
+	return e.do(req)
+}
+
+func (e *env) sessionFrom(remote string) map[string]any {
+	req := httptest.NewRequest(http.MethodGet, "/api/session", nil)
+	req.RemoteAddr = remote
+	return decode[map[string]any](e.t, e.do(req))
+}
+
+func TestSetupBlockedForOtherDevices(t *testing.T) {
+	e := setupEnv(t, func(*http.Request) bool { return false }) // e.g. another Tailscale user
+	if s := e.sessionFrom("100.64.0.7:1234"); s["setupBlocked"] != true || s["needsSetup"] == true {
+		t.Errorf("session = %v", s)
+	}
+	wantStatus(t, e.setup("100.64.0.7:1234", "intruder-password"), http.StatusForbidden)
+	if e.am.HasPassword() {
+		t.Fatal("a refused device set the password")
+	}
+	// Nothing else is reachable either.
+	wantStatus(t, e.get("/api/list"), http.StatusUnauthorized)
+}
+
+func TestSetupFromOwnersPhone(t *testing.T) {
+	owner := "100.64.0.2:4444"
+	e := setupEnv(t, func(r *http.Request) bool { return r.RemoteAddr == owner })
+	if s := e.sessionFrom(owner); s["needsSetup"] != true {
+		t.Fatalf("session = %v", s)
+	}
+	wantStatus(t, e.setup(owner, "short"), http.StatusBadRequest)
+
+	rec := e.setup(owner, "owners-own-password")
+	wantStatus(t, rec, http.StatusOK)
+	info := decode[map[string]any](t, rec)
+	if info["authenticated"] != true || info["csrf"] == "" {
+		t.Fatalf("setup response = %v", info)
+	}
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "burrow_session" {
+			e.cookie = c
+		}
+	}
+	if e.cookie == nil {
+		t.Fatal("setup didn't log the owner in")
+	}
+	wantStatus(t, e.get("/api/list"), http.StatusOK)
+
+	// Only once.
+	wantStatus(t, e.setup(owner, "another-password!"), http.StatusConflict)
+	if _, _, err := e.am.Login("owners-own-password", false, "x"); err != nil {
+		t.Errorf("password changed by second setup: %v", err)
+	}
+	if s := e.sessionFrom("100.64.0.9:1"); s["needsSetup"] == true || s["setupBlocked"] == true {
+		t.Errorf("setup still offered after setup: %v", s)
+	}
+}
+
+func TestSetupFromThisPC(t *testing.T) {
+	e := setupEnv(t, nil) // no Tailscale check available: local only
+	if s := e.sessionFrom("127.0.0.1:5000"); s["needsSetup"] != true {
+		t.Errorf("local session = %v", s)
+	}
+	if s := e.sessionFrom("100.64.0.2:1"); s["setupBlocked"] != true {
+		t.Errorf("remote without a checker = %v", s)
+	}
+	wantStatus(t, e.setup("127.0.0.1:5000", "chosen-on-the-pc"), http.StatusOK)
+}
+
+func TestSetupRejectsCrossSite(t *testing.T) {
+	e := setupEnv(t, func(*http.Request) bool { return true })
+	b, _ := json.Marshal(map[string]any{"password": "evil-site-password"})
+	req := httptest.NewRequest(http.MethodPost, "/api/setup", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.RemoteAddr = "127.0.0.1:5000"
+	wantStatus(t, e.do(req), http.StatusForbidden)
+	if e.am.HasPassword() {
+		t.Fatal("cross-site request set the password")
+	}
+}

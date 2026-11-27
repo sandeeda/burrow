@@ -72,6 +72,10 @@ type sessionInfo struct {
 	CSRF          string `json:"csrf,omitempty"`
 	Name          string `json:"name,omitempty"`
 	ReadOnly      bool   `json:"readOnly"`
+	// No password yet: NeedsSetup if this device may choose it,
+	// SetupBlocked if it may not (e.g. another Tailscale user).
+	NeedsSetup   bool `json:"needsSetup,omitempty"`
+	SetupBlocked bool `json:"setupBlocked,omitempty"`
 }
 
 // handleSession tells the app whether it's logged in. It's public, but
@@ -89,7 +93,69 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		}
 		clearSessionCookie(w, r)
 	}
-	writeJSON(w, http.StatusOK, sessionInfo{})
+	info := sessionInfo{}
+	if !s.auth.HasPassword() {
+		if s.mayChoosePassword(r) {
+			info.NeedsSetup = true
+		} else {
+			info.SetupBlocked = true
+		}
+	}
+	writeJSON(w, http.StatusOK, info)
+}
+
+// mayChoosePassword reports whether this request may set the first
+// password: it must come from this PC itself, or from a device signed in to
+// the same Tailscale account as this PC (checked by Options.CanSetUp).
+func (s *Server) mayChoosePassword(r *http.Request) bool {
+	if ip := net.ParseIP(clientIP(r)); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	return s.canSetUp != nil && s.canSetUp(r)
+}
+
+type setupRequest struct {
+	Password string `json:"password"`
+	Remember bool   `json:"remember"`
+}
+
+// handleSetup sets the first password from the browser, then logs in.
+// Only possible while no password exists, and only from an allowed device.
+func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
+	var req setupRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if s.auth.HasPassword() {
+		writeError(w, http.StatusConflict, "Burrow is already set up. Log in instead.")
+		return
+	}
+	if !s.mayChoosePassword(r) {
+		s.logf("⚠️  Refused first-time setup from %s (not this PC's Tailscale account)", clientIP(r))
+		writeError(w, http.StatusForbidden, "Only a device signed in to this PC's Tailscale account can set up Burrow.")
+		return
+	}
+	switch err := s.auth.SetPasswordIfUnset(req.Password); {
+	case errors.Is(err, auth.ErrWeakPassword):
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	case errors.Is(err, auth.ErrAlreadySetUp):
+		writeError(w, http.StatusConflict, "Burrow is already set up. Log in instead.")
+		return
+	case err != nil:
+		s.logf("api: setup: %v", err)
+		writeError(w, http.StatusInternalServerError, "setup failed")
+		return
+	}
+	s.logf("🔐 Password chosen from %s — Burrow is set up.", clientIP(r))
+	token, sess, err := s.auth.Login(req.Password, req.Remember, clientIP(r))
+	if err != nil {
+		s.logf("api: setup login: %v", err)
+		writeError(w, http.StatusInternalServerError, "setup failed")
+		return
+	}
+	setSessionCookie(w, r, token, req.Remember)
+	writeJSON(w, http.StatusOK, s.infoFor(sess))
 }
 
 func (s *Server) infoFor(sess *auth.Session) sessionInfo {

@@ -11,7 +11,14 @@ export type Entry = {
 
 export type Info = { name: string; readOnly: boolean }
 
-export type Session = { authenticated: boolean; csrf?: string; name?: string; readOnly: boolean }
+export type Session = {
+  authenticated: boolean
+  csrf?: string
+  name?: string
+  readOnly: boolean
+  needsSetup?: boolean // no password yet, and this device may choose it
+  setupBlocked?: boolean // no password yet, but this device may not choose it
+}
 
 export class ApiError extends Error {
   status: number
@@ -55,7 +62,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     throw new ApiError(0, "Can't reach your PC. Is Burrow running and Tailscale connected?")
   }
   if (!res.ok) {
-    if (res.status === 401 && url !== '/api/login') window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+    if (res.status === 401 && url !== '/api/login' && url !== '/api/setup') window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
     throw await toError(res)
   }
   if (res.status === 204) return undefined as T
@@ -73,6 +80,7 @@ function postJSON<T>(url: string, body: unknown): Promise<T> {
 export const api = {
   session: () => request<Session>('/api/session'),
   login: (password: string, remember: boolean) => postJSON<Session>('/api/login', { password, remember }),
+  setup: (password: string, remember: boolean) => postJSON<Session>('/api/setup', { password, remember }),
   logout: () => postJSON<void>('/api/logout', {}),
   info: () => request<Info>('/api/info'),
   list: (path: string) => request<{ path: string; entries: Entry[] }>(`/api/list?path=${enc(path)}`),

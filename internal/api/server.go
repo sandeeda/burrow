@@ -19,9 +19,12 @@ import (
 
 // Options configures a Server.
 type Options struct {
-	Jail     *fsjail.Jail
-	Index    *index.Index
-	Auth     *auth.Manager
+	Jail  *fsjail.Jail
+	Index *index.Index
+	Auth  *auth.Manager
+	// CanSetUp decides whether a (non-local) request may choose the first
+	// password, e.g. by checking its Tailscale identity. Nil = local only.
+	CanSetUp func(*http.Request) bool
 	Thumbs   *thumbs.Cache // optional
 	TrashDir string        // where deleted items go; must be outside the jail
 	ReadOnly bool
@@ -34,6 +37,7 @@ type Server struct {
 	jail     *fsjail.Jail
 	index    *index.Index
 	auth     *auth.Manager
+	canSetUp func(*http.Request) bool
 	thumbs   *thumbs.Cache
 	trash    string
 	readOnly bool
@@ -51,6 +55,7 @@ func New(o Options) *Server {
 		jail:     o.Jail,
 		index:    o.Index,
 		auth:     o.Auth,
+		canSetUp: o.CanSetUp,
 		thumbs:   o.Thumbs,
 		trash:    o.TrashDir,
 		readOnly: o.ReadOnly,
@@ -65,6 +70,7 @@ func New(o Options) *Server {
 	// Public: whether we're logged in, and logging in.
 	s.mux.HandleFunc("GET /api/session", s.handleSession)
 	s.mux.HandleFunc("POST /api/login", s.handleLogin)
+	s.mux.HandleFunc("POST /api/setup", s.handleSetup)
 	s.mux.Handle("POST /api/logout", s.csrf(s.handleLogout))
 	// Everything else needs a session; changes also need the CSRF token.
 	s.mux.Handle("GET /api/info", s.authed(s.handleInfo))
