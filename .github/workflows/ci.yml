@@ -46,6 +46,31 @@ jobs:
           go test ./internal/fsjail -run '^$' -fuzz '^FuzzJailOpen$' -fuzztime 30s
           go test ./internal/api -run '^$' -fuzz '^FuzzSanitizeUploadName$' -fuzztime 30s
 
+  web:
+    name: Web app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: npm ci
+        working-directory: web
+        run: npm ci
+      - name: Typecheck + build
+        working-directory: web
+        run: npm run build
+      - name: npm audit
+        working-directory: web
+        run: npm audit --audit-level=high
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build binary with embedded app
+        run: go build -o burrow ./cmd/burrow
+
   govulncheck:
     runs-on: ubuntu-latest
     steps:
