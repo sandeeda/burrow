@@ -49,3 +49,14 @@ func TestIndexFileNameDiffersPerFolder(t *testing.T) {
 		t.Error("index names collide")
 	}
 }
+
+func TestStateDirPerHostname(t *testing.T) {
+	for _, kind := range []string{"tsnet", "auth"} {
+		if stateDirName(kind, "burrow") != kind {
+			t.Errorf("default hostname must keep the original %s dir", kind)
+		}
+		if stateDirName(kind, "photos") == stateDirName(kind, "docs") || stateDirName(kind, "photos") == kind {
+			t.Errorf("different hostnames must not share %s state", kind)
+		}
+	}
+}

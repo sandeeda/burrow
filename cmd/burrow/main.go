@@ -69,7 +69,7 @@ func run(cfg *config.Config) error {
 		return err
 	}
 
-	am, err := auth.Open(filepath.Join(dataDir, "auth"))
+	am, err := auth.Open(filepath.Join(dataDir, stateDirName("auth", cfg.Hostname)))
 	if err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func run(cfg *config.Config) error {
 
 	ts := &tsnet.Server{
 		Hostname: cfg.Hostname,
-		Dir:      filepath.Join(dataDir, "tsnet"),
+		Dir:      filepath.Join(dataDir, stateDirName("tsnet", cfg.Hostname)),
 		Logf:     tsLog,
 		UserLogf: tsLog,
 	}
@@ -213,6 +213,17 @@ func within(path, dir string) bool {
 // folder doesn't make the PC sluggish.
 func thumbWorkers() int {
 	return min(4, max(1, runtime.NumCPU()/2))
+}
+
+// stateDirName gives each --hostname its own Tailscale identity and login
+// data, so several Burrows (one per folder) can run side by side without
+// overwriting each other's state. The default hostname keeps the original
+// locations, so existing installs stay signed in.
+func stateDirName(kind, hostname string) string {
+	if hostname == "burrow" {
+		return kind
+	}
+	return kind + "-" + hostname
 }
 
 // indexFileName gives each shared folder its own index database.
