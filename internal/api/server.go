@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sandeeda/burrow/internal/auth"
 	"github.com/sandeeda/burrow/internal/fsjail"
 	"github.com/sandeeda/burrow/internal/index"
 	"github.com/sandeeda/burrow/internal/thumbs"
@@ -20,6 +21,7 @@ import (
 type Options struct {
 	Jail     *fsjail.Jail
 	Index    *index.Index
+	Auth     *auth.Manager
 	Thumbs   *thumbs.Cache // optional
 	TrashDir string        // where deleted items go; must be outside the jail
 	ReadOnly bool
@@ -31,6 +33,7 @@ type Options struct {
 type Server struct {
 	jail     *fsjail.Jail
 	index    *index.Index
+	auth     *auth.Manager
 	thumbs   *thumbs.Cache
 	trash    string
 	readOnly bool
@@ -41,9 +44,13 @@ type Server struct {
 
 // New creates a Server.
 func New(o Options) *Server {
+	if o.Auth == nil {
+		panic("api: Options.Auth is required") // login is never optional (CLAUDE.md §4.3)
+	}
 	s := &Server{
 		jail:     o.Jail,
 		index:    o.Index,
+		auth:     o.Auth,
 		thumbs:   o.Thumbs,
 		trash:    o.TrashDir,
 		readOnly: o.ReadOnly,
@@ -55,12 +62,17 @@ func New(o Options) *Server {
 		s.logf = log.Printf
 	}
 
-	s.mux.HandleFunc("GET /api/info", s.handleInfo)
-	s.mux.HandleFunc("GET /api/list", s.handleList)
-	s.mux.HandleFunc("GET /api/stat", s.handleStat)
-	s.mux.HandleFunc("GET /api/download", s.handleDownload)
-	s.mux.HandleFunc("GET /api/search", s.handleSearch)
-	s.mux.HandleFunc("GET /api/thumb", s.handleThumb)
+	// Public: whether we're logged in, and logging in.
+	s.mux.HandleFunc("GET /api/session", s.handleSession)
+	s.mux.HandleFunc("POST /api/login", s.handleLogin)
+	s.mux.Handle("POST /api/logout", s.csrf(s.handleLogout))
+	// Everything else needs a session; changes also need the CSRF token.
+	s.mux.Handle("GET /api/info", s.authed(s.handleInfo))
+	s.mux.Handle("GET /api/list", s.authed(s.handleList))
+	s.mux.Handle("GET /api/stat", s.authed(s.handleStat))
+	s.mux.Handle("GET /api/download", s.authed(s.handleDownload))
+	s.mux.Handle("GET /api/search", s.authed(s.handleSearch))
+	s.mux.Handle("GET /api/thumb", s.authed(s.handleThumb))
 	s.mux.Handle("POST /api/upload", s.write(s.handleUpload))
 	s.mux.Handle("POST /api/mkdir", s.write(s.handleMkdir))
 	s.mux.Handle("POST /api/rename", s.write(s.handleRename))
@@ -99,24 +111,6 @@ func setSecurityHeaders(h http.Header) {
 	h.Set("Cross-Origin-Opener-Policy", "same-origin")
 	h.Set("Cross-Origin-Resource-Policy", "same-origin")
 	h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
-}
-
-// write wraps a state-changing handler: it is refused in read-only mode and
-// must carry the X-Burrow header. Browsers can't add custom headers to
-// cross-site requests without a CORS preflight, which we never approve, so
-// this is a second CSRF guard alongside CrossOriginProtection.
-func (s *Server) write(h http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.readOnly {
-			writeError(w, http.StatusForbidden, "Burrow is in read-only mode")
-			return
-		}
-		if r.Header.Get("X-Burrow") != "1" {
-			writeError(w, http.StatusForbidden, "missing X-Burrow header")
-			return
-		}
-		h(w, r)
-	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

@@ -16,7 +16,9 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
+	"github.com/sandeeda/burrow/internal/auth"
 	"github.com/sandeeda/burrow/internal/fsjail"
 	"github.com/sandeeda/burrow/internal/index"
 	"github.com/sandeeda/burrow/internal/thumbs"
@@ -31,7 +33,13 @@ type env struct {
 	trash   string
 	ix      *index.Index
 	outside string // a secret file next to the shared folder
+	am      *auth.Manager
+	cookie  *http.Cookie // logged-in session, sent by do() unless anon
+	csrf    string
+	anon    bool
 }
+
+const testPassword = "correct horse battery"
 
 func newEnv(t *testing.T, readOnly bool) *env {
 	t.Helper()
@@ -72,13 +80,51 @@ func newEnv(t *testing.T, readOnly bool) *env {
 	jpeg.Encode(&jpg, image.NewRGBA(image.Rect(0, 0, 600, 400)), nil)
 	os.WriteFile(filepath.Join(dir, "Photos", "real.jpg"), jpg.Bytes(), 0o644)
 	th := thumbs.New(j, filepath.Join(t.TempDir(), "thumbs"), 2)
-	s := New(Options{Jail: j, Index: ix, Thumbs: th, TrashDir: trash, ReadOnly: readOnly, Logf: t.Logf})
-	return &env{t: t, h: s.Handler(testHost, "localhost:8080"), dir: dir, trash: trash, ix: ix, outside: outside}
+	am, err := auth.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := am.SetPassword(testPassword); err != nil {
+		t.Fatal(err)
+	}
+	s := New(Options{Jail: j, Index: ix, Auth: am, Thumbs: th, TrashDir: trash, ReadOnly: readOnly, Logf: t.Logf})
+	e := &env{t: t, h: s.Handler(testHost, "localhost:8080"), dir: dir, trash: trash, ix: ix, outside: outside, am: am}
+	e.login(false)
+	return e
+}
+
+// login logs in through the API and remembers the cookie and CSRF token.
+func (e *env) login(remember bool) *httptest.ResponseRecorder {
+	e.t.Helper()
+	b, _ := json.Marshal(map[string]any{"password": testPassword, "remember": remember})
+	req := httptest.NewRequest(http.MethodPost, "/api/login", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.Host = testHost
+	rec := httptest.NewRecorder()
+	e.h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		e.t.Fatalf("login = %d %s", rec.Code, rec.Body.String())
+	}
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "burrow_session" {
+			e.cookie = c
+		}
+	}
+	var info struct{ CSRF string }
+	json.Unmarshal(rec.Body.Bytes(), &info)
+	e.csrf = info.CSRF
+	if e.cookie == nil || e.csrf == "" {
+		e.t.Fatal("login returned no cookie or CSRF token")
+	}
+	return rec
 }
 
 func (e *env) do(req *http.Request) *httptest.ResponseRecorder {
 	if req.Host == "example.com" {
 		req.Host = testHost
+	}
+	if !e.anon && e.cookie != nil && req.Header.Get("Cookie") == "" {
+		req.AddCookie(e.cookie)
 	}
 	rec := httptest.NewRecorder()
 	e.h.ServeHTTP(rec, req)
@@ -93,7 +139,7 @@ func (e *env) postJSON(url string, body any) *httptest.ResponseRecorder {
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Burrow", "1")
+	req.Header.Set("X-CSRF-Token", e.csrf)
 	return e.do(req)
 }
 
@@ -118,7 +164,7 @@ func (e *env) upload(dir string, files ...upFile) *httptest.ResponseRecorder {
 	body, ct := multipartBody(e.t, files...)
 	req := httptest.NewRequest(http.MethodPost, "/api/upload?path="+dir, body)
 	req.Header.Set("Content-Type", ct)
-	req.Header.Set("X-Burrow", "1")
+	req.Header.Set("X-CSRF-Token", e.csrf)
 	return e.do(req)
 }
 
@@ -198,7 +244,7 @@ func TestCSRFGuards(t *testing.T) {
 	e := newEnv(t, false)
 	body := `{"path":"newdir"}`
 
-	// No X-Burrow header.
+	// No CSRF token.
 	req := httptest.NewRequest(http.MethodPost, "/api/mkdir", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	wantStatus(t, e.do(req), http.StatusForbidden)
@@ -206,21 +252,21 @@ func TestCSRFGuards(t *testing.T) {
 	// Cross-site browser request.
 	req = httptest.NewRequest(http.MethodPost, "/api/mkdir", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Burrow", "1")
+	req.Header.Set("X-CSRF-Token", e.csrf)
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
 	wantStatus(t, e.do(req), http.StatusForbidden)
 
 	// Origin mismatch (older browsers without Sec-Fetch-Site).
 	req = httptest.NewRequest(http.MethodPost, "/api/mkdir", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Burrow", "1")
+	req.Header.Set("X-CSRF-Token", e.csrf)
 	req.Header.Set("Origin", "https://evil.example")
 	wantStatus(t, e.do(req), http.StatusForbidden)
 
 	// Form-style content type.
 	req = httptest.NewRequest(http.MethodPost, "/api/mkdir", strings.NewReader(body))
 	req.Header.Set("Content-Type", "text/plain")
-	req.Header.Set("X-Burrow", "1")
+	req.Header.Set("X-CSRF-Token", e.csrf)
 	wantStatus(t, e.do(req), http.StatusUnsupportedMediaType)
 
 	if e.exists("newdir") {
@@ -230,7 +276,7 @@ func TestCSRFGuards(t *testing.T) {
 	// Same-origin is fine.
 	req = httptest.NewRequest(http.MethodPost, "/api/mkdir", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Burrow", "1")
+	req.Header.Set("X-CSRF-Token", e.csrf)
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	wantStatus(t, e.do(req), http.StatusCreated)
 }
@@ -476,7 +522,7 @@ func TestUploadErrors(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/upload", strings.NewReader("x"))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Burrow", "1")
+	req.Header.Set("X-CSRF-Token", e.csrf)
 	wantStatus(t, e.do(req), http.StatusBadRequest)
 }
 
@@ -487,7 +533,7 @@ func TestUploadAbortedLeavesNothing(t *testing.T) {
 	truncated := bytes.NewReader(b[:len(b)/2]) // connection drops mid-file
 	req := httptest.NewRequest(http.MethodPost, "/api/upload?path=", truncated)
 	req.Header.Set("Content-Type", ct)
-	req.Header.Set("X-Burrow", "1")
+	req.Header.Set("X-CSRF-Token", e.csrf)
 	if rec := e.do(req); rec.Code < 400 {
 		t.Fatalf("truncated upload = %d", rec.Code)
 	}
@@ -513,7 +559,7 @@ func TestUploadLargeStreams(t *testing.T) {
 	}()
 	req := httptest.NewRequest(http.MethodPost, "/api/upload?path=", pr)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	req.Header.Set("X-Burrow", "1")
+	req.Header.Set("X-CSRF-Token", e.csrf)
 	wantStatus(t, e.do(req), http.StatusCreated)
 	fi, err := os.Stat(filepath.Join(e.dir, "big.bin"))
 	if err != nil || fi.Size() != size {
@@ -767,7 +813,7 @@ func TestStaticApp(t *testing.T) {
 		"sw.js":                {Data: []byte("// sw")},
 		".gitkeep":             {Data: []byte("")},
 	}
-	s := New(Options{Jail: e.ix.Jail(), Index: e.ix, UI: ui, TrashDir: e.trash, Logf: t.Logf})
+	s := New(Options{Jail: e.ix.Jail(), Index: e.ix, Auth: e.am, UI: ui, TrashDir: e.trash, Logf: t.Logf})
 	e.h = s.Handler(testHost)
 
 	rec := e.get("/")
@@ -859,4 +905,171 @@ func TestGzip(t *testing.T) {
 	if rec := e.get("/api/list"); rec.Header().Get("Content-Encoding") != "" {
 		t.Error("compressed without Accept-Encoding")
 	}
+}
+
+// ---- login & sessions ----
+
+func TestLoginRequiredEverywhere(t *testing.T) {
+	e := newEnv(t, false)
+	e.anon = true
+	for _, url := range []string{"/api/info", "/api/list", "/api/stat?path=hello.txt", "/api/download?path=hello.txt",
+		"/api/thumb?path=Photos/real.jpg", "/api/search?q=hello"} {
+		if rec := e.get(url); rec.Code != http.StatusUnauthorized || strings.Contains(rec.Body.String(), "hello") {
+			t.Errorf("anonymous GET %s = %d %s", url, rec.Code, rec.Body.String())
+		}
+	}
+	for _, url := range []string{"/api/mkdir", "/api/rename", "/api/delete", "/api/logout"} {
+		req := httptest.NewRequest(http.MethodPost, url, strings.NewReader(`{"path":"hello.txt","name":"x"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-CSRF-Token", e.csrf) // even with a valid token, no cookie = no entry
+		if rec := e.do(req); rec.Code != http.StatusUnauthorized {
+			t.Errorf("anonymous POST %s = %d", url, rec.Code)
+		}
+	}
+	if rec := e.upload("", upFile{"x.txt", "x"}); rec.Code != http.StatusUnauthorized {
+		t.Errorf("anonymous upload = %d", rec.Code)
+	}
+	if !e.exists("hello.txt") || e.exists("x.txt") {
+		t.Fatal("anonymous request changed files")
+	}
+
+	// The session endpoint is public but says nothing about the files.
+	rec := e.get("/api/session")
+	wantStatus(t, rec, http.StatusOK)
+	if body := rec.Body.String(); strings.Contains(body, "shared") || strings.Contains(body, "csrf") || !strings.Contains(body, `"authenticated":false`) {
+		t.Errorf("anonymous session = %s", body)
+	}
+	// The app shell itself loads without login (it shows the login screen).
+	wantStatus(t, e.get("/"), http.StatusOK)
+}
+
+func TestBogusCookieRejected(t *testing.T) {
+	e := newEnv(t, false)
+	for _, v := range []string{"", "garbage", e.csrf, strings.Repeat("A", 43)} {
+		req := httptest.NewRequest(http.MethodGet, "/api/list", nil)
+		req.AddCookie(&http.Cookie{Name: "burrow_session", Value: v})
+		if rec := e.do(req); rec.Code != http.StatusUnauthorized {
+			t.Errorf("cookie %q = %d", v, rec.Code)
+		}
+	}
+}
+
+func TestLoginCookieFlags(t *testing.T) {
+	e := newEnv(t, false)
+	c := e.cookie
+	if !c.HttpOnly || c.SameSite != http.SameSiteStrictMode || c.Path != "/" || c.MaxAge != 0 {
+		t.Errorf("session cookie = %+v", c)
+	}
+	if c.Secure {
+		t.Error("Secure set on plain-HTTP localhost (would break local login)")
+	}
+
+	// Over HTTPS (the tailnet listener) it must be Secure.
+	b, _ := json.Marshal(map[string]any{"password": testPassword, "remember": true})
+	req := httptest.NewRequest(http.MethodPost, "https://"+testHost+"/api/login", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	rec := e.do(req)
+	wantStatus(t, rec, http.StatusOK)
+	var got *http.Cookie
+	for _, ck := range rec.Result().Cookies() {
+		if ck.Name == "burrow_session" {
+			got = ck
+		}
+	}
+	if got == nil || !got.Secure || !got.HttpOnly || got.SameSite != http.SameSiteStrictMode {
+		t.Fatalf("HTTPS cookie = %+v", got)
+	}
+	if got.MaxAge != int((30 * 24 * time.Hour).Seconds()) {
+		t.Errorf("remember-me MaxAge = %d", got.MaxAge)
+	}
+}
+
+func TestLoginWrongPasswordAndLockout(t *testing.T) {
+	e := newEnv(t, false)
+	e.anon = true
+	try := func(pw string) *httptest.ResponseRecorder {
+		b, _ := json.Marshal(map[string]any{"password": pw})
+		req := httptest.NewRequest(http.MethodPost, "/api/login", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = "100.64.0.9:5555"
+		return e.do(req)
+	}
+	for i := 1; i < auth.FreeAttempts; i++ {
+		rec := try("wrong password")
+		wantStatus(t, rec, http.StatusUnauthorized)
+		if len(rec.Result().Cookies()) != 0 {
+			t.Fatal("cookie set on failed login")
+		}
+	}
+	rec := try("wrong password")
+	wantStatus(t, rec, http.StatusTooManyRequests)
+	if ra := rec.Header().Get("Retry-After"); ra != "60" {
+		t.Errorf("Retry-After = %q", ra)
+	}
+	// Locked even with the right password.
+	wantStatus(t, try(testPassword), http.StatusTooManyRequests)
+}
+
+func TestLoginRejectsCrossSite(t *testing.T) {
+	e := newEnv(t, false)
+	e.anon = true
+	b, _ := json.Marshal(map[string]any{"password": testPassword})
+	req := httptest.NewRequest(http.MethodPost, "/api/login", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	wantStatus(t, e.do(req), http.StatusForbidden)
+
+	req = httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader("password="+testPassword))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	wantStatus(t, e.do(req), http.StatusUnsupportedMediaType)
+}
+
+func TestCSRFTokenMustMatchSession(t *testing.T) {
+	e := newEnv(t, false)
+	first := e.csrf
+	firstCookie := e.cookie
+	e.login(false) // a second session with its own token
+
+	for _, tok := range []string{"", "nope", first} {
+		req := httptest.NewRequest(http.MethodPost, "/api/mkdir", strings.NewReader(`{"path":"x"}`))
+		req.Header.Set("Content-Type", "application/json")
+		if tok != "" {
+			req.Header.Set("X-CSRF-Token", tok)
+		}
+		if rec := e.do(req); rec.Code != http.StatusForbidden {
+			t.Errorf("token %q with other session's cookie = %d", tok, rec.Code)
+		}
+	}
+	// The first session still works with its own token.
+	req := httptest.NewRequest(http.MethodPost, "/api/mkdir", strings.NewReader(`{"path":"x"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-CSRF-Token", first)
+	req.AddCookie(firstCookie)
+	wantStatus(t, e.do(req), http.StatusCreated)
+}
+
+func TestSessionAndLogout(t *testing.T) {
+	e := newEnv(t, true)
+	rec := e.get("/api/session")
+	wantStatus(t, rec, http.StatusOK)
+	info := decode[map[string]any](t, rec)
+	if info["authenticated"] != true || info["csrf"] != e.csrf || info["name"] != "shared" || info["readOnly"] != true {
+		t.Errorf("session = %v", info)
+	}
+
+	// Logout needs the CSRF token (even in read-only mode it must work).
+	req := httptest.NewRequest(http.MethodPost, "/api/logout", nil)
+	wantStatus(t, e.do(req), http.StatusForbidden)
+	req = httptest.NewRequest(http.MethodPost, "/api/logout", nil)
+	req.Header.Set("X-CSRF-Token", e.csrf)
+	rec = e.do(req)
+	wantStatus(t, rec, http.StatusNoContent)
+	cleared := false
+	for _, c := range rec.Result().Cookies() {
+		cleared = cleared || (c.Name == "burrow_session" && c.MaxAge < 0)
+	}
+	if !cleared {
+		t.Error("logout didn't clear the cookie")
+	}
+	wantStatus(t, e.get("/api/list"), http.StatusUnauthorized)
 }

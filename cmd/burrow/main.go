@@ -18,9 +18,11 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
 	"tailscale.com/tsnet"
 
 	"github.com/sandeeda/burrow/internal/api"
+	"github.com/sandeeda/burrow/internal/auth"
 	"github.com/sandeeda/burrow/internal/config"
 	"github.com/sandeeda/burrow/internal/fsjail"
 	"github.com/sandeeda/burrow/internal/index"
@@ -56,6 +58,18 @@ func run(cfg *config.Config) error {
 		return err
 	}
 
+	am, err := auth.Open(filepath.Join(dataDir, "auth"))
+	if err != nil {
+		return err
+	}
+	var prompt passwordPrompter
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		prompt = terminalPrompter
+	}
+	if err := ensurePassword(am, cfg, prompt, os.Stdout); err != nil {
+		return err
+	}
+
 	jail, err := fsjail.Open(cfg.Folder)
 	if err != nil {
 		return err
@@ -72,6 +86,7 @@ func run(cfg *config.Config) error {
 	srv := api.New(api.Options{
 		Jail:     jail,
 		Index:    ix,
+		Auth:     am,
 		Thumbs:   thumbs.New(jail, filepath.Join(dataDir, "thumbs"), thumbWorkers()),
 		UI:       web.Dist(),
 		TrashDir: filepath.Join(dataDir, "trash"),
