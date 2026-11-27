@@ -77,6 +77,9 @@ func Open(dbPath string, j *fsjail.Jail) (*Index, error) {
 	return ix, nil
 }
 
+// Jail returns the jail this index covers.
+func (ix *Index) Jail() *fsjail.Jail { return ix.jail }
+
 // Close closes the database.
 func (ix *Index) Close() error { return ix.db.Close() }
 

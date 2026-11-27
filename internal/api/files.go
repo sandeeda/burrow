@@ -65,9 +65,18 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		p := joinPath(dir, de.Name())
-		// Stat follows symlinks inside the folder; ones that point outside
-		// (or are broken, or have names this OS can't address) are hidden.
-		fi, err := s.jail.Stat(p)
+		if _, err := fsjail.Clean(p); err != nil {
+			continue // a name this OS can't address safely
+		}
+		var fi fs.FileInfo
+		if de.Type()&fs.ModeSymlink != 0 {
+			// Resolve symlinks through the jail; ones that point outside
+			// the folder (or are broken) are hidden.
+			fi, err = s.jail.Stat(p)
+		} else {
+			// Cheap: the directory read already fetched this.
+			fi, err = de.Info()
+		}
 		if err != nil {
 			continue
 		}

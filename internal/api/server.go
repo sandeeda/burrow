@@ -23,6 +23,7 @@ type Options struct {
 	Thumbs   *thumbs.Cache // optional
 	TrashDir string        // where deleted items go; must be outside the jail
 	ReadOnly bool
+	UI       fs.FS                            // built web app; nil serves a placeholder
 	Logf     func(format string, args ...any) // defaults to log.Printf
 }
 
@@ -33,6 +34,7 @@ type Server struct {
 	thumbs   *thumbs.Cache
 	trash    string
 	readOnly bool
+	ui       fs.FS
 	logf     func(format string, args ...any)
 	mux      *http.ServeMux
 }
@@ -45,6 +47,7 @@ func New(o Options) *Server {
 		thumbs:   o.Thumbs,
 		trash:    o.TrashDir,
 		readOnly: o.ReadOnly,
+		ui:       o.UI,
 		logf:     o.Logf,
 		mux:      http.NewServeMux(),
 	}
@@ -65,7 +68,7 @@ func New(o Options) *Server {
 	s.mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})
-	s.mux.HandleFunc("GET /{$}", handleHome)
+	s.mux.HandleFunc("/", s.handleStatic)
 	return s
 }
 
@@ -78,7 +81,7 @@ func (s *Server) Handler(allowedHosts ...string) http.Handler {
 		allowed[strings.ToLower(h)] = true
 	}
 	cop := http.NewCrossOriginProtection()
-	inner := cop.Handler(s.mux)
+	inner := withGzip(cop.Handler(s.mux))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		setSecurityHeaders(w.Header())
 		if !allowed[strings.ToLower(r.Host)] {
@@ -178,18 +181,3 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"readOnly": s.readOnly,
 	})
 }
-
-// handleHome is a placeholder until the web app lands in Phase 2.
-func handleHome(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'")
-	io.WriteString(w, homePage)
-}
-
-const homePage = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Burrow</title>
-<style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:90vh;margin:0}h1{font-size:2rem}</style>
-</head><body><h1>Hello from Burrow 🐇</h1></body></html>
-`

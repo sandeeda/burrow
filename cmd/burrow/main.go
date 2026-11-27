@@ -24,6 +24,8 @@ import (
 	"github.com/sandeeda/burrow/internal/config"
 	"github.com/sandeeda/burrow/internal/fsjail"
 	"github.com/sandeeda/burrow/internal/index"
+	"github.com/sandeeda/burrow/internal/thumbs"
+	"github.com/sandeeda/burrow/web"
 )
 
 const rescanInterval = 5 * time.Minute
@@ -70,6 +72,8 @@ func run(cfg *config.Config) error {
 	srv := api.New(api.Options{
 		Jail:     jail,
 		Index:    ix,
+		Thumbs:   thumbs.New(jail, filepath.Join(dataDir, "thumbs"), thumbWorkers()),
+		UI:       web.Dist(),
 		TrashDir: filepath.Join(dataDir, "trash"),
 		ReadOnly: cfg.ReadOnly,
 	})
@@ -148,6 +152,12 @@ func within(path, dir string) bool {
 	}
 	rel, err := filepath.Rel(dir, path)
 	return err == nil && (rel == "." || filepath.IsLocal(rel))
+}
+
+// thumbWorkers limits concurrent image decoding so browsing a big photo
+// folder doesn't make the PC sluggish.
+func thumbWorkers() int {
+	return min(4, max(1, runtime.NumCPU()/2))
 }
 
 // indexFileName gives each shared folder its own index database.

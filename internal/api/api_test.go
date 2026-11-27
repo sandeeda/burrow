@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"image"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/sandeeda/burrow/internal/fsjail"
 	"github.com/sandeeda/burrow/internal/index"
@@ -754,4 +756,107 @@ func TestThumb(t *testing.T) {
 	wantStatus(t, e.get("/api/thumb?path=Photos/beach.jpg"), http.StatusUnprocessableEntity) // not a real JPEG
 	wantStatus(t, e.get("/api/thumb?path=missing.jpg"), http.StatusNotFound)
 	wantStatus(t, e.get("/api/thumb?path=../x.jpg"), http.StatusBadRequest)
+}
+
+func TestStaticApp(t *testing.T) {
+	e := newEnv(t, false)
+	ui := fstest.MapFS{
+		"index.html":           {Data: []byte("<!doctype html><title>Burrow</title>")},
+		"assets/app-abc123.js": {Data: []byte("console.log(1)")},
+		"manifest.webmanifest": {Data: []byte("{}")},
+		"sw.js":                {Data: []byte("// sw")},
+		".gitkeep":             {Data: []byte("")},
+	}
+	s := New(Options{Jail: e.ix.Jail(), Index: e.ix, UI: ui, TrashDir: e.trash, Logf: t.Logf})
+	e.h = s.Handler(testHost)
+
+	rec := e.get("/")
+	wantStatus(t, rec, http.StatusOK)
+	if ct := rec.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
+		t.Errorf("index Content-Type = %q", ct)
+	}
+	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'self'") || strings.Contains(csp, "unsafe") {
+		t.Errorf("index CSP = %q", csp)
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("index Cache-Control = %q", cc)
+	}
+
+	rec = e.get("/assets/app-abc123.js")
+	wantStatus(t, rec, http.StatusOK)
+	if ct := rec.Header().Get("Content-Type"); ct != "text/javascript; charset=utf-8" {
+		t.Errorf("js Content-Type = %q", ct)
+	}
+	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+		t.Errorf("asset Cache-Control = %q", cc)
+	}
+
+	rec = e.get("/manifest.webmanifest")
+	if ct := rec.Header().Get("Content-Type"); ct != "application/manifest+json" {
+		t.Errorf("manifest Content-Type = %q", ct)
+	}
+	rec = e.get("/sw.js")
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("sw.js Cache-Control = %q", cc)
+	}
+	if csp := rec.Header().Get("Content-Security-Policy"); csp != "default-src 'self'" {
+		t.Errorf("sw.js CSP = %q (the worker must be able to fetch the shell)", csp)
+	}
+
+	for _, p := range []string{"/nope.js", "/.gitkeep", "/assets", "/../go.mod", "/assets/../../x", "/%2e%2e/go.mod"} {
+		if rec := e.get(p); rec.Code == http.StatusOK {
+			t.Errorf("GET %s = 200", p)
+		}
+	}
+	// API routes still win over the app.
+	wantStatus(t, e.get("/api/info"), http.StatusOK)
+}
+
+func TestPlaceholderWithoutUI(t *testing.T) {
+	e := newEnv(t, false)
+	rec := e.get("/")
+	wantStatus(t, rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), "isn't built") {
+		t.Errorf("placeholder body = %q", rec.Body.String())
+	}
+	wantStatus(t, e.get("/other"), http.StatusNotFound)
+}
+
+func TestGzip(t *testing.T) {
+	e := newEnv(t, false)
+	req := httptest.NewRequest(http.MethodGet, "/api/list?path=Photos", nil)
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	rec := e.do(req)
+	wantStatus(t, rec, http.StatusOK)
+	if rec.Header().Get("Content-Encoding") != "gzip" {
+		t.Fatalf("list not gzipped: %v", rec.Header())
+	}
+	zr, err := gzip.NewReader(rec.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(zr)
+	if !strings.Contains(string(body), "beach.jpg") {
+		t.Errorf("gunzipped body = %s", body)
+	}
+
+	// Images, downloads and ranges are never compressed.
+	for _, tc := range []struct{ url, rng string }{
+		{"/api/thumb?path=Photos/real.jpg", ""},
+		{"/api/download?path=Photos/beach.jpg", ""},
+		{"/api/download?path=hello.txt", "bytes=0-3"},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+		req.Header.Set("Accept-Encoding", "gzip")
+		if tc.rng != "" {
+			req.Header.Set("Range", tc.rng)
+		}
+		if rec := e.do(req); rec.Header().Get("Content-Encoding") != "" {
+			t.Errorf("%s was compressed", tc.url)
+		}
+	}
+	// No Accept-Encoding: plain.
+	if rec := e.get("/api/list"); rec.Header().Get("Content-Encoding") != "" {
+		t.Error("compressed without Accept-Encoding")
+	}
 }
