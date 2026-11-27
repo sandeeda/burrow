@@ -113,6 +113,49 @@ func (j *Jail) Rename(oldp, newp string) error {
 	return j.root.Rename(o, n)
 }
 
+// Link creates newp as a hard link to oldp. It fails with fs.ErrExist if newp
+// exists, which makes it a race-free "rename without overwrite" for files.
+func (j *Jail) Link(oldp, newp string) error {
+	o, err := Clean(oldp)
+	if err != nil {
+		return err
+	}
+	n, err := Clean(newp)
+	if err != nil {
+		return err
+	}
+	if o == "." || n == "." {
+		return ErrInvalidPath
+	}
+	return j.root.Link(o, n)
+}
+
+// Readlink returns the target of a symlink, without following it.
+func (j *Jail) Readlink(p string) (string, error) {
+	n, err := Clean(p)
+	if err != nil {
+		return "", err
+	}
+	return j.root.Readlink(n)
+}
+
+// RemoveAll deletes p and everything inside it. Symlinks are removed, never
+// followed. The jail root itself can't be removed.
+func (j *Jail) RemoveAll(p string) error {
+	n, err := Clean(p)
+	if err != nil {
+		return err
+	}
+	if n == "." {
+		return ErrInvalidPath
+	}
+	return j.root.RemoveAll(n)
+}
+
+// FS returns a read-only fs.FS view of the jail, for walking. Paths given to
+// it use fs.FS rules (slash-separated, no leading slash, "." for the root).
+func (j *Jail) FS() fs.FS { return j.root.FS() }
+
 // Remove deletes a file or empty directory. The jail root itself can't be
 // removed.
 func (j *Jail) Remove(p string) error {

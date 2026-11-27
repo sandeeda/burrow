@@ -166,6 +166,38 @@ func TestJailRenameNoOverwrite(t *testing.T) {
 	}
 }
 
+func TestJailLinkNoOverwrite(t *testing.T) {
+	j, _ := setup(t)
+	if err := j.Link("sub/file.txt", "inside.txt"); !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("Link onto existing = %v, want ErrExist", err)
+	}
+	if err := j.Link("inside.txt", "../linked.txt"); err == nil {
+		t.Error("Link out of jail succeeded")
+	}
+}
+
+func TestJailRemoveAll(t *testing.T) {
+	j, symlinks := setup(t)
+	parent := filepath.Dir(j.Dir())
+	if symlinks {
+		// Removing a symlink to the parent must not delete the parent's files.
+		must(t, j.RemoveAll("escape-dir"))
+		if _, err := os.Stat(filepath.Join(parent, "secret.txt")); err != nil {
+			t.Fatalf("RemoveAll followed a symlink: %v", err)
+		}
+	}
+	must(t, j.RemoveAll("sub"))
+	if _, err := j.Stat("sub"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("sub still exists: %v", err)
+	}
+	if err := j.RemoveAll("../root"); err == nil {
+		t.Error("RemoveAll ../root succeeded")
+	}
+	if err := j.RemoveAll(""); !errors.Is(err, ErrInvalidPath) {
+		t.Errorf("RemoveAll root = %v", err)
+	}
+}
+
 // FuzzJailOpen throws arbitrary paths at a real jail and checks the secret
 // outside it is never read, even through symlinks.
 func FuzzJailOpen(f *testing.F) {
