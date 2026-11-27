@@ -1,79 +1,126 @@
-# Burrow 🐇
+<p align="center">
+  <img src="web/public/icons/icon-192.png" width="96" height="96" alt="Burrow logo: a white rabbit peeking out of its burrow on a violet tile">
+</p>
 
-**Your own Google Drive, in one command.**
+<h1 align="center">Burrow</h1>
 
-Burrow turns any folder on your computer into a private drive you can open from your phone, anywhere: browse, view photos, stream videos, upload from your camera. Your files never leave your disk and nothing is uploaded to a cloud. Your phone reaches your PC through [Tailscale](https://tailscale.com), which is private and encrypted and needs no router setup or open ports.
+<p align="center"><strong>Your own Google Drive, in one command.</strong><br>
+Turn any folder on your computer into a private drive you can open from your phone, anywhere.</p>
 
-```
+<p align="center">
+  <a href="https://github.com/sandeeda/burrow/actions/workflows/ci.yml"><img src="https://github.com/sandeeda/burrow/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/sandeeda/burrow/releases"><img src="https://img.shields.io/github/v/release/sandeeda/burrow?include_prereleases&sort=semver" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
+</p>
+
+<!-- Demo: record a ~15 s phone screen capture (open app → swipe photos → play a video → upload from camera),
+     save it as docs/demo.gif and replace this comment with:
+     <p align="center"><img src="docs/demo.gif" width="320" alt="Burrow on a phone"></p> -->
+
+```console
 $ burrow ~/Pictures
 📁 Sharing:   /home/you/Pictures
+🎞️  Video thumbnails: on (ffmpeg found)
 ✅ Burrow is live at https://burrow.tail1234.ts.net
-📱 Scan with your phone's camera (Tailscale must be on):
-   ▄▄▄▄▄▄▄ ▄ ▄▄ ▄▄▄▄▄▄▄
-   ...
+📱 Scan with your phone's camera (Tailscale must be on)
 ```
 
-> 🚧 Early release. See [SECURITY.md](SECURITY.md) for how Burrow protects your files.
+Your files **never leave your disk**. Your phone reaches your computer directly through [Tailscale](https://tailscale.com): private, encrypted and free for personal use. There's no router setup, no open ports, no cloud account and no subscription.
 
-## What you get
+## Install
 
-- 📱 **A phone app** you can add to your home screen (iPhone and Android): clean, fast, with smooth spring animations and swipe gestures.
-- 🖼️ **Photos** in a grid with thumbnails (including iPhone **HEIC**) and a swipeable viewer with pinch-zoom. **Videos** stream with seeking, even very large ones, with preview frames if ffmpeg is installed.
-- ⬆️ **Uploads** from your camera or files. Nothing is ever overwritten.
-- 🔎 **Search** by file name across the whole folder.
-- ✏️ **Rename, new folder, delete.** Deleted items go to Burrow's trash on your PC, so you can recover them.
-- 🔐 **A password is always required**, even inside your private Tailscale network.
-- 🪶 **One small program** with no other software to install on your PC (Tailscale is built in).
-
-## Quick start (about 5 minutes)
-
-### 1. Set up Tailscale (once)
-
-1. On your **phone**, install the **Tailscale** app ([iPhone](https://apps.apple.com/app/tailscale/id1470499037), [Android](https://play.google.com/store/apps/details?id=com.tailscale.ipn)) and sign in. This creates your free private network.
-2. On a computer, open the Tailscale admin console's **[DNS page](https://login.tailscale.com/admin/dns)**:
-   - make sure **MagicDNS** is enabled
-   - scroll down and click **Enable HTTPS**
-
-You don't need to install Tailscale on your PC, because Burrow has it built in.
-
-### 2. Install Burrow on your PC
-
-**macOS / Linux**
 ```sh
+# macOS / Linux
 curl -fsSL https://raw.githubusercontent.com/sandeeda/burrow/main/install.sh | sh
-# or, with Homebrew:
+
+# macOS / Linux with Homebrew
 brew install sandeeda/tap/burrow
 ```
 
-**Windows** (PowerShell)
 ```powershell
+# Windows (PowerShell)
 irm https://raw.githubusercontent.com/sandeeda/burrow/main/install.ps1 | iex
 ```
 
-Or download a build for your system from [Releases](https://github.com/sandeeda/burrow/releases). Every download comes with SHA-256 checksums, and both install scripts verify them.
+Or download a build from [Releases](https://github.com/sandeeda/burrow/releases). It's one ~10 MB file with nothing else to install, and the install scripts verify its SHA-256 checksum.
 
-### 3. Run it on a folder
+## Quick start (about 5 minutes)
 
-```sh
-burrow ~/Pictures                 # macOS / Linux
-burrow "$HOME\Pictures"           # Windows
-```
+1. **Phone:** install the Tailscale app ([iPhone](https://apps.apple.com/app/tailscale/id1470499037) · [Android](https://play.google.com/store/apps/details?id=com.tailscale.ipn)) and sign in.
+2. **Tailscale admin → [DNS](https://login.tailscale.com/admin/dns):** keep **MagicDNS** on and click **Enable HTTPS**.
+3. **Computer:** run `burrow ~/Pictures` (any folder works).
+   - **Choose a password.** Burrow asks in the terminal, or on your phone if there's no terminal.
+   - **Approve the computer.** Open the `login.tailscale.com` link Burrow prints, with the same account as your phone.
+4. **Phone:** scan the QR code, log in, then **Add to Home Screen**.
 
-The first time:
+Step-by-step guides, including starting Burrow automatically: [Windows](docs/setup-windows.md) · [macOS](docs/setup-macos.md) · [Linux](docs/setup-linux.md).
 
-1. **Create a password.** Burrow asks in the terminal. You'll type it on your phone.
-2. **Approve this PC.** Burrow prints a `login.tailscale.com` link. Open it and sign in with the **same account** as your phone.
-3. Burrow prints its address and a **QR code**.
+## What you get
 
-### 4. Open it on your phone
+- 📱 **A real phone app.** Install it to your home screen on iPhone or Android. Fast, with spring animations and the swipe gestures you expect.
+- 🖼️ **Photos.** A thumbnail grid, a full-screen viewer with swipe, pinch and double-tap zoom, and a 1280-pixel preview to save mobile data. **iPhone HEIC photos** work in every browser.
+- 🎬 **Videos** stream with instant seeking, even multi-GB files. If ffmpeg is installed you also get preview frames.
+- ⬆️ **Uploads** from your camera, photo library or files, with progress. Existing files are never overwritten.
+- 🔎 **Search** across every file name in the folder. Filter by photos, videos, docs or folders.
+- ✏️ **Rename, new folder, delete.** Deleted items go to a trash folder on your computer, so you can recover them.
+- 🌓 **Light and dark mode**, following your phone.
+- 🔐 **Login always required**, even on your private network. See [Security](#security).
 
-Make sure the Tailscale app is **on**, then scan the QR code (or type the address), log in, and add it to your home screen:
-- **iPhone (Safari):** Share → **Add to Home Screen**
-- **Android (Chrome):** ⋮ → **Install app**
+## How it compares
 
-That's it. Your folder is now on your phone, wherever you are.
+|  | **Burrow** | Google Drive | Nextcloud | FileBrowser |
+|---|---|---|---|---|
+| Your files stay on your own disk | ✅ | ❌ uploaded to Google | ✅ | ✅ |
+| Setup | one command | sign up | server + database + web server | one binary |
+| Reach it from anywhere without opening ports | ✅ built-in Tailscale | ✅ | ⚠️ you set up remote access | ⚠️ you set up remote access |
+| Installable phone app | ✅ web app (PWA) | ✅ | ✅ | ⚠️ mobile-friendly website |
+| Photo viewer with swipe and zoom, HEIC | ✅ | ✅ | ✅ | ⚠️ basic |
+| Video streaming with seeking | ✅ | ✅ | ✅ | ✅ |
+| Sync folders between devices | ❌ not a goal | ✅ | ✅ | ❌ |
+| Multiple users and sharing links | ❌ just you | ✅ | ✅ | ✅ |
+| Office docs, calendars, apps | ❌ | ✅ | ✅ | ❌ |
+| Storage limit | your disk | 15 GB free | your disk | your disk |
+| Account or telemetry | none | Google account | none | none |
 
-Detailed guides: [Windows](docs/setup-windows.md) · [macOS](docs/setup-macos.md) · [Linux](docs/setup-linux.md), including starting Burrow automatically when your PC starts.
+Burrow does one thing: **your folder, on your phone, privately.** If you need sync clients, several users or an office suite, Nextcloud is the better tool. If you want a web file manager on a server you already expose, FileBrowser is great.
+
+## Security
+
+Burrow gives a phone access to a folder on your computer, so it's built defensively:
+
+- **Never on the public internet.** It listens only on your private Tailscale network and on `127.0.0.1`.
+- **Password always required:** argon2id hashing, lockout after repeated wrong guesses, HttpOnly/SameSite=Strict cookies, and CSRF tokens on every change.
+- **Locked to your folder.** Every file access goes through Go's [`os.Root`](https://pkg.go.dev/os#Root), on top of strict path checks that are fuzz-tested in CI on Linux and Windows.
+- **Safe file serving.** Uploaded HTML or SVG is never rendered as part of the app, and there's a strict Content-Security-Policy.
+- **No telemetry.** Burrow even switches off the Tailscale library's own diagnostic log upload.
+
+Details and how to report a problem: [SECURITY.md](SECURITY.md).
+
+## FAQ
+
+**Does my computer need to stay on?**
+Yes. Burrow serves files from your computer, so it has to be awake and running Burrow. The setup guides show how to start it automatically.
+
+**Is anything uploaded anywhere?**
+No. Your phone talks to your computer over Tailscale's encrypted connection. Tailscale helps the two devices find each other but can't read your traffic.
+
+**Can I share more than one folder?**
+Run Burrow once per folder with a different `--hostname` and `--port`, for example `burrow --hostname photos ~/Pictures` and `burrow --hostname docs --port 8081 ~/Documents`. Each one gets its own Tailscale device name and its own password.
+
+**Can my family use it?**
+Anyone on your Tailscale network who knows the password can. For a read-only view, start Burrow with `--read-only`. Only devices on the computer's own Tailscale account can do the first-time password setup.
+
+**What about my whole home folder?**
+Burrow refuses to share a folder that contains its own data folder (Tailscale identity, password hash), which includes your home folder. Share `Pictures`, `Documents` and so on instead.
+
+**I forgot the password.**
+On the computer, run `burrow --reset-password <folder>`. This logs out every device.
+
+**Does it need anything else installed?**
+No. Optionally install **ffmpeg** (`winget install Gyan.FFmpeg`, `brew install ffmpeg` or `sudo apt install ffmpeg`) to get video preview frames.
+
+**Where does Burrow keep its own data?**
+In `%APPDATA%\burrow` (Windows), `~/Library/Application Support/burrow` (macOS) or `~/.config/burrow` (Linux). It is never inside the shared folder.
 
 ## Options
 
@@ -81,29 +128,21 @@ Detailed guides: [Windows](docs/setup-windows.md) · [macOS](docs/setup-macos.md
 burrow [flags] <folder>
 
   --read-only          view and download only: no uploads, renames or deletes
-  --port 8080          port for http://127.0.0.1 on this PC (never exposed to the network)
+  --port 8080          port for http://127.0.0.1 on this computer (never exposed to the network)
   --hostname burrow    Tailscale machine name → https://<hostname>.<tailnet>.ts.net
   --reset-password     choose a new password (logs out every device)
-  --password-file f    set the password from a file (for services / scripts)
+  --password-file f    set the first password from a file (for services)
   --version            print the version
 ```
 
-## FAQ
+## Roadmap
 
-**Is anything uploaded to the internet?**
-No. Your files stay on your disk. Your phone talks to your PC directly over Tailscale's encrypted connection. Burrow has no account, no server of ours and no telemetry. It also switches off Tailscale's own diagnostic log upload.
+- **v1.1: AI search.** Find files by what's inside them ("tax receipts 2024"), using a local model through [Ollama](https://ollama.com) by default. Optionally, "Ask" questions with your own Claude API key, sending only the matching snippets.
+- Restore from trash in the app.
+- Move files between folders.
+- Signed and notarised builds for macOS and Windows, and a winget package.
 
-**Who can reach it?**
-Only devices signed in to *your* Tailscale network, and they still need Burrow's password. Burrow never listens on your local network or the public internet. On your PC it is also available at `http://127.0.0.1:8080`, for you only.
-
-**I forgot the password.**
-On the PC, run `burrow --reset-password <folder>`.
-
-**Where does Burrow keep its own data?**
-In `%APPDATA%\burrow` (Windows), `~/Library/Application Support/burrow` (macOS) or `~/.config/burrow` (Linux). This holds the Tailscale identity, password hash, search index, thumbnails and trash. It is never inside the shared folder, and Burrow refuses to share a folder that contains it.
-
-**Do I need anything else installed?**
-No. Optionally, install **ffmpeg** to get preview frames for videos (`winget install Gyan.FFmpeg`, `brew install ffmpeg` or `sudo apt install ffmpeg`) and restart Burrow. Burrow says at startup whether video previews are on. iPhone HEIC photos work without anything extra.
+Ideas and bug reports are welcome in [Issues](https://github.com/sandeeda/burrow/issues).
 
 ## Building from source
 
@@ -118,4 +157,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Burrow is not affiliated with Tailscale Inc.

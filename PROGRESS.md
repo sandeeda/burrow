@@ -1,7 +1,9 @@
 # Burrow — Progress
 
 ## Current phase
-**Phase 3 — Login, security hardening, packaging** — all done except the [HUMAN] 5-minute fresh-machine test. Since then (owner requests, 2026-11-27): repo public, Homebrew tap, HEIC + video thumbnails, Airbnb-inspired redesign.
+**Phase 4 — Launch prep (v0.1.0)** — in progress.
+
+Phase 3 ✅ DONE (2026-11-27): owner confirmed the fresh-machine test works. Extras done at his request: repo public, Homebrew tap, HEIC + video thumbnails, Airbnb-inspired redesign.
 
 Phase 2 ✅ DONE (2026-11-27): owner tested on phone — installed, browsing, photos, video, uploads all good. Follow-up tweaks from his testing: liquid-glass iOS theme, double-tap zoom-out fix, upload panel auto-hide.
 
@@ -107,7 +109,7 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 - [x] Phase 3 code: login, sessions, CSRF, QR, hardening, packaging, docs
 - [x] [HUMAN] Password set by the owner (2026-11-27)
 - [x] Repo made public at owner's request (2026-11-27) after a history scan for secrets (none; author email is visible in commits). Private vulnerability reporting on; topics added. CodeQL now runs (first scan green).
-- [ ] [HUMAN] Fresh-machine test: install → phone access in < 5 minutes following only the README
+- [x] [HUMAN] Fresh-machine test: owner confirmed it works (2026-11-27)
 - [x] Homebrew: public repo sandeeda/homebrew-tap; SSH deploy key (write, that repo only) stored as secret HOMEBREW_TAP_DEPLOY_KEY; GoReleaser pushes Casks/burrow.rb on release. Verify `brew install sandeeda/tap/burrow` on macOS after v0.1.0 is published.
 - [ ] Then Phase 4: launch prep
 
