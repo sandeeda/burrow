@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"image"
+	"image/jpeg"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/sandeeda/burrow/internal/fsjail"
 	"github.com/sandeeda/burrow/internal/index"
+	"github.com/sandeeda/burrow/internal/thumbs"
 )
 
 const testHost = "127.0.0.1:8080"
@@ -63,7 +66,11 @@ func newEnv(t *testing.T, readOnly bool) *env {
 		t.Fatal(err)
 	}
 	trash := filepath.Join(t.TempDir(), "trash")
-	s := New(Options{Jail: j, Index: ix, TrashDir: trash, ReadOnly: readOnly, Logf: t.Logf})
+	var jpg bytes.Buffer
+	jpeg.Encode(&jpg, image.NewRGBA(image.Rect(0, 0, 600, 400)), nil)
+	os.WriteFile(filepath.Join(dir, "Photos", "real.jpg"), jpg.Bytes(), 0o644)
+	th := thumbs.New(j, filepath.Join(t.TempDir(), "thumbs"), 2)
+	s := New(Options{Jail: j, Index: ix, Thumbs: th, TrashDir: trash, ReadOnly: readOnly, Logf: t.Logf})
 	return &env{t: t, h: s.Handler(testHost, "localhost:8080"), dir: dir, trash: trash, ix: ix, outside: outside}
 }
 
@@ -256,7 +263,7 @@ func TestList(t *testing.T) {
 	}
 
 	got = decode[listResp](t, e.get("/api/list?path=Photos"))
-	if n := names(got.Entries); n != "beach.jpg,logo.svg,page.html" {
+	if n := names(got.Entries); n != "beach.jpg,logo.svg,page.html,real.jpg" {
 		t.Errorf("Photos entries = %s", n)
 	}
 	for _, en := range got.Entries {
@@ -722,4 +729,29 @@ func TestNumberedName(t *testing.T) {
 			t.Errorf("numberedName(%v) = %q, want %q", in, got, want)
 		}
 	}
+}
+
+func TestThumb(t *testing.T) {
+	e := newEnv(t, false)
+	rec := e.get("/api/thumb?path=Photos/real.jpg")
+	wantStatus(t, rec, http.StatusOK)
+	if ct := rec.Header().Get("Content-Type"); ct != "image/jpeg" {
+		t.Errorf("Content-Type = %q", ct)
+	}
+	cfg, err := jpeg.DecodeConfig(bytes.NewReader(rec.Body.Bytes()))
+	if err != nil || cfg.Width != 256 || cfg.Height != 170 {
+		t.Errorf("thumb = %dx%d, %v", cfg.Width, cfg.Height, err)
+	}
+	rec = e.get("/api/thumb?size=1280&path=Photos/real.jpg")
+	wantStatus(t, rec, http.StatusOK)
+	if cfg, _ := jpeg.DecodeConfig(bytes.NewReader(rec.Body.Bytes())); cfg.Width != 600 {
+		t.Errorf("large thumb width = %d (should not enlarge)", cfg.Width)
+	}
+
+	wantStatus(t, e.get("/api/thumb?size=999&path=Photos/real.jpg"), http.StatusBadRequest)
+	wantStatus(t, e.get("/api/thumb?path=Photos/logo.svg"), http.StatusUnsupportedMediaType)
+	wantStatus(t, e.get("/api/thumb?path=hello.txt"), http.StatusUnsupportedMediaType)
+	wantStatus(t, e.get("/api/thumb?path=Photos/beach.jpg"), http.StatusUnprocessableEntity) // not a real JPEG
+	wantStatus(t, e.get("/api/thumb?path=missing.jpg"), http.StatusNotFound)
+	wantStatus(t, e.get("/api/thumb?path=../x.jpg"), http.StatusBadRequest)
 }

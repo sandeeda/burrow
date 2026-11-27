@@ -13,13 +13,15 @@ import (
 
 	"github.com/sandeeda/burrow/internal/fsjail"
 	"github.com/sandeeda/burrow/internal/index"
+	"github.com/sandeeda/burrow/internal/thumbs"
 )
 
 // Options configures a Server.
 type Options struct {
 	Jail     *fsjail.Jail
 	Index    *index.Index
-	TrashDir string // where deleted items go; must be outside the jail
+	Thumbs   *thumbs.Cache // optional
+	TrashDir string        // where deleted items go; must be outside the jail
 	ReadOnly bool
 	Logf     func(format string, args ...any) // defaults to log.Printf
 }
@@ -28,6 +30,7 @@ type Options struct {
 type Server struct {
 	jail     *fsjail.Jail
 	index    *index.Index
+	thumbs   *thumbs.Cache
 	trash    string
 	readOnly bool
 	logf     func(format string, args ...any)
@@ -39,6 +42,7 @@ func New(o Options) *Server {
 	s := &Server{
 		jail:     o.Jail,
 		index:    o.Index,
+		thumbs:   o.Thumbs,
 		trash:    o.TrashDir,
 		readOnly: o.ReadOnly,
 		logf:     o.Logf,
@@ -53,6 +57,7 @@ func New(o Options) *Server {
 	s.mux.HandleFunc("GET /api/stat", s.handleStat)
 	s.mux.HandleFunc("GET /api/download", s.handleDownload)
 	s.mux.HandleFunc("GET /api/search", s.handleSearch)
+	s.mux.HandleFunc("GET /api/thumb", s.handleThumb)
 	s.mux.Handle("POST /api/upload", s.write(s.handleUpload))
 	s.mux.Handle("POST /api/mkdir", s.write(s.handleMkdir))
 	s.mux.Handle("POST /api/rename", s.write(s.handleRename))
