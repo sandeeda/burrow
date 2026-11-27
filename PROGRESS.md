@@ -1,7 +1,9 @@
 # Burrow — Progress
 
 ## Current phase
-**Phase 2 — Web UI (PWA)** — built and verified in desktop Chrome; waiting for [HUMAN] phone test (install to home screen, browse, photo, video + seek, camera upload, over mobile data).
+**Phase 3 — Login, security hardening, packaging** — not started.
+
+Phase 2 ✅ DONE (2026-11-27): owner tested on phone — installed, browsing, photos, video, uploads all good. Follow-up tweaks from his testing: liquid-glass iOS theme, double-tap zoom-out fix, upload panel auto-hide.
 
 Phase 1 ✅ DONE (2026-11-27): all tests + fuzzing green in CI on Linux and Windows (run 45930813599).
 
@@ -75,7 +77,7 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 ## Next
 - [x] CI green on Linux + Windows for the Phase 1 code → Phase 1 done
 - [x] Phase 2 code: thumbnails, PWA, embedding, CI
-- [ ] [HUMAN] Phase 2 phone test over mobile data (test folder of photo copies is being served)
+- [x] [HUMAN] Phase 2 phone test — owner confirmed "all looks good" (2026-11-27)
 - [ ] Then Phase 3: login, sessions, CSRF tokens, QR code, packaging
 
 ## Open questions
