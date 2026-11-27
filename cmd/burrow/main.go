@@ -130,6 +130,7 @@ func run(cfg *config.Config) error {
 		return err
 	}
 	fmt.Printf("✅ Burrow is live at https://%s\n", dnsName)
+	printQR(os.Stdout, "https://"+dnsName, term.IsTerminal(int(os.Stdout.Fd())))
 	go serve(tlsLn, srv.Handler(dnsName, dnsName+":443"))
 
 	<-ctx.Done()
