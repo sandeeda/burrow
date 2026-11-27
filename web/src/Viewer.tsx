@@ -18,7 +18,7 @@ type Gesture =
   | { kind: 'pending'; x0: number; y0: number }
   | { kind: 'swipe'; x0: number }
   | { kind: 'dismiss'; x0: number; y0: number }
-  | { kind: 'pan'; x0: number; y0: number; px: number; py: number }
+  | { kind: 'pan'; x0: number; y0: number; px: number; py: number; canTap: boolean }
   | { kind: 'pinch'; d0: number; s0: number; cx: number; cy: number; px: number; py: number }
 
 const MAX_ZOOM = 5
@@ -180,7 +180,9 @@ export function Viewer({ items, index, onIndex, onClose, onMenu }: Props) {
         py: s.py,
       }
     } else if (isZoomed()) {
-      gesture.current = { kind: 'pan', x0: e.clientX, y0: e.clientY, px: v.current.px, py: v.current.py }
+      // Zoomed in: a drag pans, but a touch that barely moves is still a tap,
+      // so a second double-tap can zoom back out.
+      gesture.current = { kind: 'pan', x0: e.clientX, y0: e.clientY, px: v.current.px, py: v.current.py, canTap: true }
     } else {
       gesture.current = { kind: 'pending', x0: e.clientX - v.current.x, y0: e.clientY }
     }
@@ -245,7 +247,7 @@ export function Viewer({ items, index, onIndex, onClose, onMenu }: Props) {
       if (pointers.current.size === 1) {
         // One finger still down: continue as a pan.
         const [p] = [...pointers.current.values()]
-        gesture.current = { kind: 'pan', x0: p.x, y0: p.y, px: s.px, py: s.py }
+        gesture.current = { kind: 'pan', x0: p.x, y0: p.y, px: s.px, py: s.py, canTap: false }
         return
       }
       const scale = Math.min(Math.max(s.scale, 1), MAX_ZOOM)
@@ -253,6 +255,12 @@ export function Viewer({ items, index, onIndex, onClose, onMenu }: Props) {
       spring('scale', scale, 0, SNAPPY)
       spring('px', scale <= 1 ? 0 : t.px, 0, SNAPPY)
       spring('py', scale <= 1 ? 0 : t.py, 0, SNAPPY)
+    } else if (g.kind === 'pan' && g.canTap && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) < 10) {
+      // Barely moved: snap back from any tiny nudge and count it as a tap.
+      const t = clampPan(s.px, s.py, s.scale)
+      spring('px', t.px, 0, SNAPPY)
+      spring('py', t.py, 0, SNAPPY)
+      handleTap(e.clientX, e.clientY)
     } else if (g.kind === 'pan') {
       // Glide with momentum, then settle inside the edges.
       const t = clampPan(s.px + vel.x * 0.25, s.py + vel.y * 0.25, s.scale)
