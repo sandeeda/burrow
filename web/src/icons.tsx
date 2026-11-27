@@ -212,3 +212,18 @@ export const VideoGlyph = ({ size = 16, className }: P) => (
     <path d="M14.5 5.2 19 2.6v8.8l-4.5-2.6z" fill="#fff" />
   </svg>
 )
+export const HomeIcon = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H5.5A1.5 1.5 0 0 1 4 19z" />
+  </Svg>
+)
+export const MenuIcon = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </Svg>
+)
+export const ArrowLeft = (p: P) => (
+  <Svg {...p}>
+    <path d="M19 12H5M11 6l-6 6 6 6" />
+  </Svg>
+)

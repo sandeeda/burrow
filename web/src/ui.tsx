@@ -1,39 +1,42 @@
-// Shared UI in the style of iOS system controls: action sheets, menus and
-// alerts (with spring motion), long-press, and Files-app icons.
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+// Shared UI: bottom sheets, menus and dialogs (with spring motion),
+// floating-label fields, long-press, and file icons.
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { Entry } from './api'
 import { kindOf } from './util'
 import { animateSpring, rubberBand, SNAPPY, VelocityTracker } from './spring'
-import { CheckIcon, DocFill, FolderFill } from './icons'
+import { CheckIcon, CloseIcon, DocFill, FolderFill } from './icons'
 
 const extLabel = (name: string) => {
   const i = name.lastIndexOf('.')
   return i > 0 ? name.slice(i + 1, i + 5).toUpperCase() : ''
 }
 
-/** Files-app style icon: blue folder, or a document page labelled with its type. */
+/** Violet folder, or a document page labelled with its type. */
 export function KindIcon({ entry, size = 24 }: { entry: Entry; size?: number }) {
   const kind = kindOf(entry)
   if (kind === 'folder') return <FolderFill size={size} className="ic-folder" />
   return <DocFill size={size} className={'ic-doc ic-' + kind} label={extLabel(entry.name)} />
 }
-export type SheetAction = { label: string; danger?: boolean; onSelect: () => void }
+
+export type SheetAction = { label: string; icon?: ReactNode; danger?: boolean; onSelect: () => void }
 
 const EXIT_MS = 220
 
 /**
- * iOS action sheet: centred options in a rounded group, a separate Cancel
- * button. Springs up, and can be flicked down to dismiss.
+ * Bottom sheet: springs up, follows your finger when dragged, flick down
+ * (or tap outside) to dismiss.
  */
 export function ActionSheet({
   title,
   message,
+  leading,
   actions,
   onClose,
 }: {
   title?: string
   message?: string
+  leading?: ReactNode // e.g. a thumbnail next to the title
   actions: SheetAction[]
   onClose: () => void
 }) {
@@ -115,30 +118,35 @@ export function ActionSheet({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <div className="sheet-group material">
-          {(title || message) && (
-            <div className="sheet-title">
+        <div className="grabber" aria-hidden="true" />
+        {(title || message) && (
+          <div className="sheet-head">
+            {leading}
+            <div className="sheet-head-text">
               {title && <strong>{title}</strong>}
               {message && <span>{message}</span>}
             </div>
-          )}
+            <button className="icon-circle" aria-label="Close" onClick={() => close()}>
+              <CloseIcon size={18} />
+            </button>
+          </div>
+        )}
+        <div className="sheet-list">
           {actions.map((a) => (
             <button
               key={a.label}
               role="menuitem"
-              className={'sheet-item' + (a.danger ? ' danger' : '')}
+              className={'sheet-row' + (a.danger ? ' danger' : '')}
               onClick={() => {
                 if (Math.abs(y.current) > 4) return
                 close(0, a.onSelect)
               }}
             >
-              {a.label}
+              <span className="sheet-row-icon">{a.icon}</span>
+              <span>{a.label}</span>
             </button>
           ))}
         </div>
-        <button className="sheet-cancel material" onClick={() => close()}>
-          Cancel
-        </button>
       </div>
     </div>,
     document.body,
@@ -148,7 +156,7 @@ export function ActionSheet({
 export type MenuItem = { label: string; checked?: boolean; icon?: ReactNode; onSelect: () => void }
 export type MenuSection = { title?: string; items: MenuItem[] }
 
-/** iOS pull-down menu that springs out of the button that opened it. */
+/** Pop-up menu that springs out of the button that opened it. */
 export function Menu({ anchor, sections, onClose }: { anchor: DOMRect; sections: MenuSection[]; onClose: () => void }) {
   const [leaving, setLeaving] = useState(false)
   const close = (then?: () => void) => {
@@ -161,9 +169,29 @@ export function Menu({ anchor, sections, onClose }: { anchor: DOMRect; sections:
   }
   useEscape(() => close())
 
-  // Open upwards from bottom toolbars, downwards from top ones.
+  // A menu is anchored to its button, so it must go away as soon as the page
+  // moves (scroll, wheel, swipe or resize) rather than float detached.
+  const closeRef = useRef(close)
+  closeRef.current = close
+  useEffect(() => {
+    const dismiss = () => closeRef.current()
+    const opts = { passive: true, capture: true } as const
+    window.addEventListener('scroll', dismiss, opts)
+    window.addEventListener('wheel', dismiss, opts)
+    window.addEventListener('touchmove', dismiss, opts)
+    window.addEventListener('resize', dismiss)
+    return () => {
+      window.removeEventListener('scroll', dismiss, opts)
+      window.removeEventListener('wheel', dismiss, opts)
+      window.removeEventListener('touchmove', dismiss, opts)
+      window.removeEventListener('resize', dismiss)
+    }
+  }, [])
+
+  // Open upwards from bottom bars, downwards from top ones.
   const fromBottom = anchor.top > window.innerHeight / 2
-  const left = Math.min(Math.max(8, anchor.left), window.innerWidth - 258)
+  const width = 248
+  const left = Math.min(Math.max(8, anchor.right - width), window.innerWidth - width - 8)
   const style: React.CSSProperties = fromBottom
     ? { left, bottom: window.innerHeight - anchor.top + 10, transformOrigin: `${anchor.left - left + anchor.width / 2}px bottom` }
     : { left, top: anchor.bottom + 10, transformOrigin: `${anchor.left - left + anchor.width / 2}px top` }
@@ -171,15 +199,15 @@ export function Menu({ anchor, sections, onClose }: { anchor: DOMRect; sections:
   return createPortal(
     <div className="overlay">
       <div className="dim clear" onClick={() => close()} />
-      <div className={'menu material' + (leaving ? ' leaving' : '')} style={style} role="menu">
+      <div className={'menu' + (leaving ? ' leaving' : '')} style={style} role="menu">
         {sections.map((s, i) => (
           <div key={i} className="menu-section">
             {s.title && <div className="menu-title">{s.title}</div>}
             {s.items.map((it) => (
               <button key={it.label} role="menuitemradio" aria-checked={it.checked} className="menu-item" onClick={() => close(it.onSelect)}>
-                <span className="menu-check">{it.checked && <CheckIcon size={16} />}</span>
+                <span className="menu-icon">{it.icon}</span>
                 <span className="menu-label">{it.label}</span>
-                {it.icon}
+                <span className="menu-check">{it.checked && <CheckIcon size={18} />}</span>
               </button>
             ))}
           </div>
@@ -187,6 +215,45 @@ export function Menu({ anchor, sections, onClose }: { anchor: DOMRect; sections:
       </div>
     </div>,
     document.body,
+  )
+}
+
+type FieldProps = {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
+  autoComplete?: string
+  name?: string
+  invalid?: boolean
+  disabled?: boolean
+  inputRef?: React.Ref<HTMLInputElement>
+  enterKeyHint?: React.InputHTMLAttributes<HTMLInputElement>['enterKeyHint']
+}
+
+/** Text field whose label floats up when focused or filled. */
+export function Field({ label, value, onChange, type = 'text', autoComplete, name, invalid, disabled, inputRef, enterKeyHint }: FieldProps) {
+  const id = useId()
+  return (
+    <div className={'field' + (invalid ? ' invalid' : '')}>
+      <input
+        id={id}
+        ref={inputRef}
+        type={type}
+        name={name}
+        value={value}
+        placeholder=" "
+        autoComplete={autoComplete}
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        disabled={disabled}
+        aria-invalid={invalid}
+        enterKeyHint={enterKeyHint}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <label htmlFor={id}>{label}</label>
+    </div>
   )
 }
 
@@ -200,7 +267,7 @@ type AlertProps = {
   onClose: () => void
 }
 
-/** iOS-style alert: zooms in, optional text field, side-by-side buttons. */
+/** Centred dialog with a close button, optional field and two buttons. */
 export function Alert({ title, message, confirmLabel, danger, input, onConfirm, onClose }: AlertProps) {
   const [value, setValue] = useState(input?.initial ?? '')
   const [busy, setBusy] = useState(false)
@@ -238,30 +305,25 @@ export function Alert({ title, message, confirmLabel, danger, input, onConfirm, 
 
   return createPortal(
     <div className="overlay center">
-      <div className={'dim' + (leaving ? ' leaving' : '')} />
-      <form className={'alert material' + (leaving ? ' leaving' : '')} role="alertdialog" aria-modal="true" aria-label={title} onSubmit={submit}>
-        <div className="alert-body">
+      <div className={'dim' + (leaving ? ' leaving' : '')} onClick={close} />
+      <form className={'dialog' + (leaving ? ' leaving' : '')} role="dialog" aria-modal="true" aria-label={title} onSubmit={submit}>
+        <div className="dialog-head">
+          <button type="button" className="icon-circle" aria-label="Close" onClick={close}>
+            <CloseIcon size={18} />
+          </button>
           <h2>{title}</h2>
-          {message && <p>{message}</p>}
-          {input && (
-            <input
-              ref={ref}
-              value={value}
-              placeholder={input.placeholder}
-              onChange={(e) => setValue(e.target.value)}
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-              enterKeyHint="done"
-            />
-          )}
-          {error && <p className="alert-error">{error}</p>}
+          <span className="icon-circle-spacer" />
         </div>
-        <div className="alert-buttons">
-          <button type="button" onClick={close}>
+        <div className="dialog-body">
+          {message && <p>{message}</p>}
+          {input && <Field label={input.placeholder ?? 'Name'} value={value} onChange={setValue} inputRef={ref} enterKeyHint="done" />}
+          {error && <p className="dialog-error">{error}</p>}
+        </div>
+        <div className="dialog-foot">
+          <button type="button" className="link-btn" onClick={close}>
             Cancel
           </button>
-          <button type="submit" className={'strong' + (danger ? ' danger' : '')} disabled={busy}>
+          <button type="submit" className={'btn ' + (danger ? 'danger' : 'primary')} disabled={busy}>
             {busy ? 'Working…' : confirmLabel}
           </button>
         </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError, type Session } from './api'
+import { Field } from './ui'
 
 const MIN = 8
 
@@ -38,35 +39,22 @@ export function Setup({ onDone }: { onDone: (s: Session) => void }) {
   return (
     <div className="login">
       <form className="login-card" onSubmit={submit}>
-        <img className="login-icon" src="/icons/icon-192.png" alt="" width={84} height={84} />
-        <h1>Set Up Burrow</h1>
+        <img className="login-icon" src="/icons/icon-192.png" alt="" width={64} height={64} />
+        <h1>Welcome to Burrow</h1>
         <p className="login-sub">Choose a password. You'll use it to open your files on any of your devices.</p>
 
         {/* Lets iOS Keychain / password managers save the new password. */}
         <input type="text" name="username" autoComplete="username" value="burrow" readOnly hidden />
-        <input
-          ref={input}
-          className="login-input"
-          type="password"
-          name="new-password"
-          autoComplete="new-password"
-          placeholder="New password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={busy}
-          aria-label="New password"
-        />
-        <input
-          className="login-input mid"
+        <Field inputRef={input} label="New password" type="password" name="new-password" autoComplete="new-password" value={password} onChange={setPassword} disabled={busy} />
+        <Field
+          label="Confirm password"
           type="password"
           name="confirm-password"
           autoComplete="new-password"
-          placeholder="Confirm password"
           value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
+          onChange={setConfirm}
           disabled={busy}
-          aria-label="Confirm password"
-          aria-invalid={mismatch}
+          invalid={mismatch}
           enterKeyHint="done"
         />
         <label className="switch-row">
@@ -79,7 +67,7 @@ export function Setup({ onDone }: { onDone: (s: Session) => void }) {
           {error || hint}
         </p>
 
-        <button className="pill accent login-btn" type="submit" disabled={tooShort || password !== confirm || busy}>
+        <button className="btn primary block" type="submit" disabled={tooShort || password !== confirm || busy}>
           {busy ? 'Setting Up…' : 'Set Password'}
         </button>
       </form>

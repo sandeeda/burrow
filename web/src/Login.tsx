@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError, type Session } from './api'
+import { Field } from './ui'
 
 /** iOS-style login screen. Password managers can save the password (username "burrow"). */
 export function Login({ onLoggedIn }: { onLoggedIn: (s: Session) => void }) {
@@ -53,24 +54,22 @@ export function Login({ onLoggedIn }: { onLoggedIn: (s: Session) => void }) {
   return (
     <div className="login">
       <form className={'login-card' + (shaking ? ' shaking' : '')} onAnimationEnd={() => setShaking(false)} onSubmit={submit}>
-        <img className="login-icon" src="/icons/icon-192.png" alt="" width={84} height={84} />
-        <h1>Burrow</h1>
-        <p className="login-sub">Enter your password to open your files.</p>
+        <img className="login-icon" src="/icons/icon-192.png" alt="" width={64} height={64} />
+        <h1>Welcome back</h1>
+        <p className="login-sub">Log in to open your files.</p>
 
         {/* Lets iOS Keychain / password managers save and fill the password. */}
         <input type="text" name="username" autoComplete="username" value="burrow" readOnly hidden />
-        <input
-          ref={input}
-          className="login-input"
+        <Field
+          inputRef={input}
+          label="Password"
           type="password"
           name="password"
           autoComplete="current-password"
-          placeholder="Password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={setPassword}
           disabled={lockedFor > 0 || busy}
-          aria-label="Password"
-          aria-invalid={!!error}
+          invalid={!!error}
           enterKeyHint="go"
         />
 
@@ -85,8 +84,8 @@ export function Login({ onLoggedIn }: { onLoggedIn: (s: Session) => void }) {
           {lockedFor > 0 && ` Try again in ${mm}:${ss}.`}
         </p>
 
-        <button className="pill accent login-btn" type="submit" disabled={!password || busy || lockedFor > 0}>
-          {busy ? 'Checking…' : 'Log In'}
+        <button className="btn primary block" type="submit" disabled={!password || busy || lockedFor > 0}>
+          {busy ? 'Checking…' : 'Continue'}
         </button>
       </form>
       <p className="login-foot">Forgot it? Run <code>burrow --reset-password</code> on your PC.</p>

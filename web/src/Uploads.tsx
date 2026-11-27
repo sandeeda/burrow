@@ -101,7 +101,7 @@ export function UploadPanel({ items, onCancel, onClear }: { items: UploadItem[];
   const pct = total ? Math.round((loaded / total) * 100) : 100
 
   return (
-    <div className={'uploads material' + (leaving ? ' leaving' : '')} role="status" aria-live="polite">
+    <div className={'uploads' + (leaving ? ' leaving' : '')} role="status" aria-live="polite">
       <div className="uploads-head">
         <strong>
           {active.length
@@ -111,11 +111,11 @@ export function UploadPanel({ items, onCancel, onClear }: { items: UploadItem[];
               : `Uploaded ${items.length} file${items.length > 1 ? 's' : ''}`}
         </strong>
         {active.length ? (
-          <button className="pill small" onClick={onCancel}>
+          <button className="btn secondary small" onClick={onCancel}>
             Cancel
           </button>
         ) : (
-          <button className="round-btn small" aria-label="Dismiss" onClick={onClear}>
+          <button className="icon-circle small" aria-label="Dismiss" onClick={onClear}>
             <CloseIcon size={20} />
           </button>
         )}

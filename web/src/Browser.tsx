@@ -1,10 +1,54 @@
 import { useEffect, useRef, useState } from 'react'
 import { thumbURL, type Entry } from './api'
 import { KindIcon, useLongPress } from './ui'
-import { ChevronRight, EllipsisCircle, VideoGlyph } from './icons'
+import { ChevronRight, MoreIcon } from './icons'
 import { formatDate, formatSize, hasThumb, kindOf, parentOf } from './util'
 
 const PAGE = 150
+
+/** "12 photos · 3 videos · 2 folders" */
+export function countsText(entries: Entry[]): string {
+  const n = { folder: 0, image: 0, video: 0, other: 0 }
+  for (const e of entries) {
+    const k = kindOf(e)
+    if (k === 'folder' || k === 'image' || k === 'video') n[k]++
+    else n.other++
+  }
+  const part = (c: number, one: string, many: string) => (c ? `${c.toLocaleString()} ${c === 1 ? one : many}` : null)
+  return (
+    [part(n.image, 'photo', 'photos'), part(n.video, 'video', 'videos'), part(n.other, 'file', 'files'), part(n.folder, 'folder', 'folders')]
+      .filter(Boolean)
+      .join(' · ') || 'Empty'
+  )
+}
+
+type ItemProps = { entry: Entry; onOpen: (e: Entry) => void; onMenu: (e: Entry) => void }
+
+/** Folders as big rounded cards. */
+export function FolderCards({ folders, onOpen, onMenu }: { folders: Entry[]; onOpen: (e: Entry) => void; onMenu: (e: Entry) => void }) {
+  return (
+    <ul className="cards">
+      {folders.map((f, i) => (
+        <FolderCard key={f.path} entry={f} delay={Math.min(i, 12)} onOpen={onOpen} onMenu={onMenu} />
+      ))}
+    </ul>
+  )
+}
+
+function FolderCard({ entry, delay, onOpen, onMenu }: ItemProps & { delay: number }) {
+  const lp = useLongPress(() => onMenu(entry))
+  return (
+    <li style={{ '--i': delay } as React.CSSProperties}>
+      <button className="card" onClick={() => !lp.consumed() && onOpen(entry)} {...lp.handlers}>
+        <span className="card-cover">
+          <KindIcon entry={entry} size={56} />
+        </span>
+        <span className="card-title">{entry.name}</span>
+        <span className="card-sub">{formatDate(entry.modTime)}</span>
+      </button>
+    </li>
+  )
+}
 
 type Props = {
   entries: Entry[]
@@ -15,7 +59,7 @@ type Props = {
   resetKey: string
 }
 
-/** Renders entries in pages so folders with thousands of files stay smooth. */
+/** Files as a tile grid or a list, rendered in pages so huge folders stay smooth. */
 export function Browser({ entries, view, showFolder, onOpen, onMenu, resetKey }: Props) {
   const [count, setCount] = useState(PAGE)
   const sentinel = useRef<HTMLDivElement>(null)
@@ -39,45 +83,22 @@ export function Browser({ entries, view, showFolder, onOpen, onMenu, resetKey }:
   return (
     <>
       {view === 'grid' ? (
-        <ul className="grid" key={resetKey}>
+        <ul className="tiles" key={resetKey}>
           {shown.map((e, i) => (
-            <Tile key={e.path} entry={e} delay={i < 40 ? i : 0} onOpen={onOpen} onMenu={onMenu} />
+            <Tile key={e.path} entry={e} delay={i < 24 ? i : 0} onOpen={onOpen} onMenu={onMenu} />
           ))}
         </ul>
       ) : (
-        <ul className="list" key={resetKey}>
+        <ul className="rows" key={resetKey}>
           {shown.map((e) => (
             <Row key={e.path} entry={e} showFolder={showFolder} onOpen={onOpen} onMenu={onMenu} />
           ))}
         </ul>
       )}
       {count < entries.length && <div ref={sentinel} className="sentinel" aria-hidden="true" />}
-      {count >= entries.length && <Summary entries={entries} />}
     </>
   )
 }
-
-/** "38 Photos, 3 Videos" footer, like the Photos app. */
-function Summary({ entries }: { entries: Entry[] }) {
-  const counts = { folder: 0, image: 0, video: 0, other: 0 }
-  for (const e of entries) {
-    const k = kindOf(e)
-    if (k === 'folder' || k === 'image' || k === 'video') counts[k]++
-    else counts.other++
-  }
-  const part = (n: number, one: string, many: string) => (n ? `${n.toLocaleString()} ${n === 1 ? one : many}` : null)
-  const text = [
-    part(counts.folder, 'Folder', 'Folders'),
-    part(counts.image, 'Photo', 'Photos'),
-    part(counts.video, 'Video', 'Videos'),
-    part(counts.other, 'File', 'Files'),
-  ]
-    .filter(Boolean)
-    .join(', ')
-  return <p className="summary">{text}</p>
-}
-
-type ItemProps = { entry: Entry; onOpen: (e: Entry) => void; onMenu: (e: Entry) => void }
 
 function Thumb({ entry, size }: { entry: Entry; size: number }) {
   const [state, setState] = useState<'loading' | 'ok' | 'failed'>('loading')
@@ -105,33 +126,24 @@ function Tile({ entry, delay, onOpen, onMenu }: ItemProps & { delay: number }) {
   const style = photo ? 'photo' : kind === 'video' ? 'video' : 'doc'
   return (
     <li style={{ '--i': delay } as React.CSSProperties}>
-      <button
-        className={'tile ' + style}
-        onClick={() => !lp.consumed() && onOpen(entry)}
-        aria-label={entry.name}
-        title={entry.name}
-        {...lp.handlers}
-      >
+      <button className={'tile ' + style} onClick={() => !lp.consumed() && onOpen(entry)} aria-label={entry.name} title={entry.name} {...lp.handlers}>
         {style === 'photo' && <Thumb entry={entry} size={32} />}
-        {style === 'video' && (
-          <>
-            <PlayCircle />
-            <VideoGlyph className="badge" />
-          </>
-        )}
-        {style === 'doc' && <KindIcon entry={entry} size={kind === 'folder' ? 68 : 52} />}
+        {style === 'video' && <PlayButton />}
+        {style === 'doc' && <KindIcon entry={entry} size={44} />}
         {style !== 'photo' && <span className="tile-name">{entry.name}</span>}
       </button>
     </li>
   )
 }
 
-const PlayCircle = () => (
-  <svg className="play" width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
-    <circle cx="20" cy="20" r="19" fill="rgba(255,255,255,.22)" />
-    <path d="m16 12.5 12 7.5-12 7.5z" fill="#fff" />
-  </svg>
+const PlayButton = () => (
+  <span className="play" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 16 16">
+      <path d="M5 3.2v9.6a.8.8 0 0 0 1.2.7l7.4-4.8a.8.8 0 0 0 0-1.4L6.2 2.5A.8.8 0 0 0 5 3.2z" fill="currentColor" />
+    </svg>
+  </span>
 )
+
 function Row({ entry, showFolder, onOpen, onMenu }: ItemProps & { showFolder?: boolean }) {
   const lp = useLongPress(() => onMenu(entry))
   const meta = [entry.isDir ? null : formatSize(entry.size), formatDate(entry.modTime)].filter(Boolean).join(' · ')
@@ -153,7 +165,7 @@ function Row({ entry, showFolder, onOpen, onMenu }: ItemProps & { showFolder?: b
       </button>
       {!entry.isDir && (
         <button className="row-more" aria-label={`More actions for ${entry.name}`} onClick={() => onMenu(entry)}>
-          <EllipsisCircle size={22} />
+          <MoreIcon size={20} />
         </button>
       )}
     </li>

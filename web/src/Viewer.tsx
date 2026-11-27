@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { downloadURL, thumbURL, type Entry } from './api'
 import { useEscape } from './ui'
 import { animateSpring, BOUNCY, rubberBand, SNAPPY, VelocityTracker, reducedMotion } from './spring'
-import { ChevronLeft, ChevronRight, DownloadIcon, EllipsisCircle, ExternalIcon } from './icons'
+import { ChevronLeft, ChevronRight, CloseIcon, DownloadIcon, ExternalIcon, MoreIcon } from './icons'
 import { hasThumb, isHeic, kindOf, triggerDownload } from './util'
 
 type Props = {
@@ -328,39 +328,38 @@ export function Viewer({ items, index, onIndex, onClose, onMenu }: Props) {
         )}
       </div>
 
-      <div className="viewer-top material">
-        <button className="nav-back" aria-label="Back" onClick={close}>
-          <ChevronLeft size={28} />
+      <div className="viewer-top">
+        <button className="v-btn" aria-label="Close" onClick={close}>
+          <CloseIcon size={20} />
         </button>
-        <div className="viewer-title">
+        <div className="v-pill">
           <span className="viewer-name">{entry.name}</span>
           <span className="viewer-count">
-            {index + 1} of {items.length}
+            {index + 1} / {items.length}
           </span>
         </div>
-        <button className="nav-btn" aria-label="More actions" onClick={() => onMenu(entry)}>
-          <EllipsisCircle size={26} />
+        <button className="v-btn" aria-label="More actions" onClick={() => onMenu(entry)}>
+          <MoreIcon size={20} />
         </button>
       </div>
 
-      <div className="viewer-bottom material">
-        <button aria-label="Download" onClick={() => triggerDownload(downloadURL(entry.path))}>
-          <DownloadIcon size={22} />
+      <div className="viewer-bottom">
+        <button className="v-btn" aria-label="Download" onClick={() => triggerDownload(downloadURL(entry.path))}>
+          <DownloadIcon size={20} />
         </button>
         {kindOf(entry) === 'image' && (
-          <a href={downloadURL(entry.path, true)} target="_blank" rel="noopener" aria-label="Open original">
-            <ExternalIcon size={22} />
+          <a className="v-btn" href={downloadURL(entry.path, true)} target="_blank" rel="noopener" aria-label="Open original">
+            <ExternalIcon size={20} />
           </a>
         )}
       </div>
-
       {index > 0 && (
-        <button className="viewer-nav left material" aria-label="Previous" onClick={() => go(-1)}>
+        <button className="viewer-nav left v-btn" aria-label="Previous" onClick={() => go(-1)}>
           <ChevronLeft size={26} />
         </button>
       )}
       {index < items.length - 1 && (
-        <button className="viewer-nav right material" aria-label="Next" onClick={() => go(1)}>
+        <button className="viewer-nav right v-btn" aria-label="Next" onClick={() => go(1)}>
           <ChevronRight size={26} />
         </button>
       )}
@@ -381,7 +380,7 @@ function Media({ entry, active }: { entry: Entry; active: boolean }) {
             ? "This browser can't show HEIC photos (iPhone format). Safari on iPhone, iPad and Mac can."
             : "This file can't be previewed here."}
         </p>
-        <button className="pill accent" onClick={() => triggerDownload(downloadURL(entry.path))}>
+        <button className="btn primary" onClick={() => triggerDownload(downloadURL(entry.path))}>
           <DownloadIcon size={18} /> Download
         </button>
       </div>

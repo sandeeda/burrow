@@ -58,17 +58,17 @@ export function Root() {
     case 'checking':
       return (
         <div className="login">
-          <img className="splash-icon" src="/icons/icon-192.png" alt="Burrow" width={84} height={84} />
+          <img className="splash-icon" src="/icons/icon-192.png" alt="Burrow" width={64} height={64} />
         </div>
       )
     case 'offline':
       return (
         <div className="login">
           <div className="login-card">
-            <img className="login-icon" src="/icons/icon-192.png" alt="" width={84} height={84} />
+            <img className="login-icon" src="/icons/icon-192.png" alt="" width={64} height={64} />
             <h1>Can't reach your PC</h1>
             <p className="login-sub">{state.message}</p>
-            <button className="pill accent login-btn" onClick={check}>
+            <button className="btn primary block" onClick={check}>
               Try Again
             </button>
           </div>
@@ -80,13 +80,13 @@ export function Root() {
       return (
         <div className="login">
           <div className="login-card">
-            <img className="login-icon" src="/icons/icon-192.png" alt="" width={84} height={84} />
+            <img className="login-icon" src="/icons/icon-192.png" alt="" width={64} height={64} />
             <h1>Not Set Up Yet</h1>
             <p className="login-sub">
               Burrow doesn't have a password yet. Open it from a device signed in to the same Tailscale account as the PC, or run
               burrow in a terminal on the PC.
             </p>
-            <button className="pill accent login-btn" onClick={check}>
+            <button className="btn primary block" onClick={check}>
               Try Again
             </button>
           </div>

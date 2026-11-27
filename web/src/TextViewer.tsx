@@ -23,14 +23,14 @@ export function TextViewer({ entry, onClose }: { entry: Entry; onClose: () => vo
 
   return (
     <div className="textview">
-      <div className="textview-bar material">
-        <button className="nav-btn" aria-label="Close" onClick={onClose}>
+      <div className="textview-bar">
+        <button className="icon-circle" aria-label="Close" onClick={onClose}>
           <CloseIcon />
         </button>
         <div className="textview-title">
           <span>{entry.name}</span>
         </div>
-        <button className="nav-btn" aria-label="Download" onClick={() => triggerDownload(downloadURL(entry.path))}>
+        <button className="icon-circle" aria-label="Download" onClick={() => triggerDownload(downloadURL(entry.path))}>
           <DownloadIcon />
         </button>
       </div>

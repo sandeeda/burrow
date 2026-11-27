@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Root } from './Root'
+import '@fontsource-variable/plus-jakarta-sans/wght.css'
 import './styles.css'
 
 createRoot(document.getElementById('root')!).render(
