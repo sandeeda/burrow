@@ -1,0 +1,94 @@
+# GoReleaser config: `git tag v0.1.0 && git push --tags` runs this in CI
+# (.github/workflows/release.yml). Local trial: goreleaser release --snapshot --clean
+version: 2
+project_name: burrow
+
+before:
+  hooks:
+    # The web app is embedded into the binary, so build it first.
+    - npm --prefix web ci
+    - npm --prefix web run build
+
+builds:
+  - id: burrow
+    main: ./cmd/burrow
+    binary: burrow
+    env:
+      - CGO_ENABLED=0 # pure Go: no C toolchain needed, static binaries
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: '{{ .CommitTimestamp }}' # reproducible builds
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+
+release:
+  # Releases start as drafts so the owner can review the notes before publishing.
+  draft: true
+  prerelease: auto
+
+# Homebrew: `brew install sandeeda/tap/burrow`.
+# Needs a public repo github.com/sandeeda/homebrew-tap and a token secret
+# HOMEBREW_TAP_TOKEN; skipped until then.
+homebrew_casks:
+  - name: burrow
+    repository:
+      owner: sandeeda
+      name: homebrew-tap
+      token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
+    homepage: https://github.com/sandeeda/burrow
+    description: Turn any folder on your PC into a private drive you can reach from your phone.
+    license: MIT
+    binaries: [burrow]
+    hooks:
+      post:
+        # The binary isn't notarised by Apple yet; let macOS run it.
+        install_steps: |
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/burrow"]
+
+# winget: manifests are generated into dist/winget for the owner to submit
+# to microsoft/winget-pkgs (CLAUDE.md §8).
+winget:
+  - name: Burrow
+    publisher: sandeeda
+    package_identifier: sandeeda.Burrow
+    short_description: Turn any folder on your PC into a private drive you can reach from your phone.
+    description: |
+      Burrow shares a folder on your PC with your own devices over Tailscale.
+      Files never leave your disk; login is always required.
+    license: MIT
+    license_url: https://github.com/sandeeda/burrow/blob/main/LICENSE
+    homepage: https://github.com/sandeeda/burrow
+    publisher_url: https://github.com/sandeeda
+    tags: [files, tailscale, self-hosted, drive, pwa]
+    commit_author:
+      name: sandeeda
+    repository:
+      owner: sandeeda
+      name: winget-pkgs
+    skip_upload: true

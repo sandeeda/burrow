@@ -1,0 +1,86 @@
+name: Installers
+
+# Builds a snapshot release and runs install.sh / install.ps1 against it on
+# real Linux, macOS and Windows machines. Only runs when installer-related
+# files change (macOS minutes are expensive).
+
+on:
+  push:
+    branches: [main]
+    paths: [install.sh, install.ps1, .goreleaser.yaml, .github/workflows/installers.yml]
+  pull_request:
+    paths: [install.sh, install.ps1, .goreleaser.yaml, .github/workflows/installers.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: shellcheck --shell=sh install.sh
+
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --snapshot --clean
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+
+  install:
+    needs: snapshot
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Serve the snapshot like GitHub Releases would
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory dist >/dev/null 2>&1 &
+          sleep 2
+          f=$(ls dist/*.zip | head -n 1)
+          v=$(basename "$f" | sed -E 's/^burrow_(.*)_windows_.*$/\1/')
+          echo "BURROW_VERSION=v$v" >> "$GITHUB_ENV"
+          echo "BURROW_DOWNLOAD_URL=http://127.0.0.1:8765" >> "$GITHUB_ENV"
+
+      - name: install.sh
+        if: runner.os != 'Windows'
+        run: |
+          BURROW_INSTALL_DIR="$RUNNER_TEMP/bin" sh install.sh
+          "$RUNNER_TEMP/bin/burrow" --version
+
+      - name: install.ps1
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./install.ps1
+          & "$env:LOCALAPPDATA\Programs\Burrow\burrow.exe" --version

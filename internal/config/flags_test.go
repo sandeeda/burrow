@@ -56,3 +56,10 @@ func TestParseErrors(t *testing.T) {
 		t.Errorf("--help = %v, want ErrHelp", err)
 	}
 }
+
+func TestParseVersionNeedsNoFolder(t *testing.T) {
+	c, err := Parse([]string{"--version"}, io.Discard)
+	if err != nil || !c.ShowVersion {
+		t.Fatalf("--version: %v %+v", err, c)
+	}
+}

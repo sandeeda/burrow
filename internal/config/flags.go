@@ -19,6 +19,7 @@ type Config struct {
 
 	PasswordFile  string // read the password from this file instead of prompting
 	ResetPassword bool   // set a new password (logs out every device)
+	ShowVersion   bool   // print the version and exit
 }
 
 // ErrHelp is returned by Parse when the user asked for help.
@@ -37,6 +38,7 @@ func Parse(args []string, out io.Writer) (*Config, error) {
 	fs.StringVar(&c.Hostname, "hostname", "burrow", "Tailscale machine name (https://<hostname>.<tailnet>.ts.net)")
 	fs.StringVar(&c.PasswordFile, "password-file", "", "set the login password from the first line of this file (for scripts and services)")
 	fs.BoolVar(&c.ResetPassword, "reset-password", false, "choose a new login password (logs out every device)")
+	fs.BoolVar(&c.ShowVersion, "version", false, "print the version and exit")
 	fs.Usage = func() {
 		fmt.Fprintln(out, "Usage: burrow [flags] <folder>")
 		fmt.Fprintln(out, "\nShares <folder> with your devices over Tailscale.")
@@ -45,6 +47,9 @@ func Parse(args []string, out io.Writer) (*Config, error) {
 	}
 	if err := fs.Parse(args); err != nil {
 		return nil, err
+	}
+	if c.ShowVersion {
+		return c, nil
 	}
 
 	if fs.NArg() != 1 {

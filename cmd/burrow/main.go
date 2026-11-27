@@ -33,6 +33,9 @@ import (
 
 const rescanInterval = 5 * time.Minute
 
+// version is set at release time (-ldflags "-X main.version=...").
+var version = "dev"
+
 func main() {
 	cfg, err := config.Parse(os.Args[1:], os.Stderr)
 	if errors.Is(err, config.ErrHelp) {
@@ -41,6 +44,10 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "burrow: %v\n", err)
 		os.Exit(2)
+	}
+	if cfg.ShowVersion {
+		fmt.Println("burrow", version)
+		return
 	}
 	if err := run(cfg); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("burrow: %v", err)
