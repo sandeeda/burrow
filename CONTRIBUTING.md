@@ -32,6 +32,8 @@ go build -o burrow ./cmd/burrow
 | `web/` | React + Vite + TypeScript PWA |
 | `tools/genicon` | draws the app icons |
 
+**Changing web dependencies on Windows?** npm 11 on Windows can drop `@emnapi/*` entries (dependencies of an optional WebAssembly build of rolldown) from `web/package-lock.json`, which makes `npm ci` fail on Linux. CI catches it. If it happens, regenerate the lock on Linux/macOS, or keep the previous lock and add only the new packages.
+
 ## Tests
 
 ```sh
