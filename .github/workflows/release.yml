@@ -36,8 +36,8 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Optional: lets GoReleaser update github.com/sandeeda/homebrew-tap.
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          # Deploy key that can write only to github.com/sandeeda/homebrew-tap.
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
 
       - name: Keep winget manifests for submission
         uses: actions/upload-artifact@v4

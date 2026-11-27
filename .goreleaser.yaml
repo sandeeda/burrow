@@ -52,15 +52,19 @@ release:
   prerelease: auto
 
 # Homebrew: `brew install sandeeda/tap/burrow`.
-# Needs a public repo github.com/sandeeda/homebrew-tap and a token secret
-# HOMEBREW_TAP_TOKEN; skipped until then.
+# Pushed to github.com/sandeeda/homebrew-tap over SSH with a deploy key that
+# can write to that repo only (secret HOMEBREW_TAP_DEPLOY_KEY). The cask
+# points at this release's downloads, which work once the draft is published.
 homebrew_casks:
   - name: burrow
     repository:
       owner: sandeeda
       name: homebrew-tap
-      token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
-    skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
+      git:
+        url: git@github.com:sandeeda/homebrew-tap.git
+        private_key: '{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}'
+    directory: Casks
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_DEPLOY_KEY" }}false{{ else }}true{{ end }}'
     homepage: https://github.com/sandeeda/burrow
     description: Turn any folder on your PC into a private drive you can reach from your phone.
     license: MIT
