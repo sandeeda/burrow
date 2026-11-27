@@ -18,7 +18,7 @@ REPO="sandeeda/burrow"
 say() { printf '%s\n' "$*"; }
 fail() { printf 'burrow install: %s\n' "$*" >&2; exit 1; }
 
-need() { command -v "$1" >/dev/null 2>&1 || fail "needs '$1' — please install it and try again"; }
+need() { command -v "$1" >/dev/null 2>&1 || fail "needs '$1' - please install it and try again"; }
 need uname
 need tar
 need mktemp
@@ -59,11 +59,11 @@ base="${BURROW_DOWNLOAD_URL:-https://github.com/$REPO/releases/download/$version
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-say "⬇️  Downloading Burrow $version for $os/$arch…"
+say "Downloading Burrow ${version} for ${os}/${arch}..."
 fetch_to "$base/$archive" "$tmp/$archive" || fail "download failed: $base/$archive"
 fetch_to "$base/checksums.txt" "$tmp/checksums.txt" || fail "couldn't download checksums"
 
-say "🔍 Verifying checksum…"
+say "Verifying checksum..."
 want=$(grep " $archive\$" "$tmp/checksums.txt" | cut -d ' ' -f 1)
 [ -n "$want" ] || fail "no checksum published for $archive"
 if command -v sha256sum >/dev/null 2>&1; then
@@ -73,7 +73,7 @@ elif command -v shasum >/dev/null 2>&1; then
 else
   fail "needs sha256sum or shasum to verify the download"
 fi
-[ "$want" = "$got" ] || fail "checksum mismatch — the download may be corrupted or tampered with"
+[ "$want" = "$got" ] || fail "checksum mismatch - the download may be corrupted or tampered with"
 
 tar -xzf "$tmp/$archive" -C "$tmp" burrow
 
@@ -95,7 +95,7 @@ if [ "$os" = darwin ] && command -v xattr >/dev/null 2>&1; then
   xattr -d com.apple.quarantine "$dir/burrow" 2>/dev/null || true
 fi
 
-say "✅ Installed burrow $version to $dir/burrow"
+say "Installed burrow ${version} to ${dir}/burrow"
 case ":$PATH:" in
   *":$dir:"*) ;;
   *) say "   Add it to your PATH:  export PATH=\"$dir:\$PATH\"" ;;

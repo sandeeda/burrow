@@ -1,7 +1,7 @@
 # Burrow — Progress
 
 ## Current phase
-**Phase 3 — Login, security hardening, packaging** — not started.
+**Phase 3 — Login, security hardening, packaging** — code, packaging and docs done; waiting on [HUMAN] steps (set real password, decide when to go public, 5-minute fresh-install test).
 
 Phase 2 ✅ DONE (2026-11-27): owner tested on phone — installed, browsing, photos, video, uploads all good. Follow-up tweaks from his testing: liquid-glass iOS theme, double-tap zoom-out fix, upload panel auto-hide.
 
@@ -24,6 +24,9 @@ All JSON. Paths are slash-separated, relative to the shared folder (`""` = top).
 
 | Method | Endpoint | Body / query | Result |
 |---|---|---|---|
+| GET | `/api/session` | public | `{authenticated, csrf?, name?, readOnly}` |
+| POST | `/api/login` | `{password, remember}` public | sets cookie; 401 wrong, 429 + Retry-After locked |
+| POST | `/api/logout` | CSRF | 204, clears cookie |
 | GET | `/api/info` | | `{name, readOnly}` |
 | GET | `/api/list?path=` | | `{path, entries:[Entry]}` folders first |
 | GET | `/api/stat?path=` | | `Entry` |
@@ -36,7 +39,7 @@ All JSON. Paths are slash-separated, relative to the shared folder (`""` = top).
 | GET | `/api/thumb?path=&size=256|1280&v=<modTime>` | | JPEG (415 unsupported type, 422 undecodable) |
 | GET | `/` and app files | | embedded PWA from `web/dist` |
 
-`Entry = {name, path, isDir, size, modTime, type}`. All POSTs need header `X-Burrow: 1`; JSON POSTs need `Content-Type: application/json`.
+`Entry = {name, path, isDir, size, modTime, type}`. Everything except session/login needs the `burrow_session` cookie (401 otherwise). Changes need header `X-CSRF-Token` (from session/login). JSON POSTs need `Content-Type: application/json`.
 Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409 exists, 415, 421 wrong Host.
 
 ## Done
@@ -51,7 +54,7 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 - `internal/index` — SQLite (`modernc.org/sqlite`) filename index: full walk at startup + every 5 min, immediate updates on API writes; multi-word, case-insensitive, `%`/`_` literal; batched commits.
 - `internal/api` — endpoints above, with:
   - Host allowlist per listener (blocks DNS rebinding against localhost)
-  - `http.CrossOriginProtection` + required `X-Burrow` header + JSON content-type (CSRF, until Phase 3 tokens)
+  - `http.CrossOriginProtection` + JSON content-type (CSRF); Phase 3 replaced the interim `X-Burrow` header with per-session CSRF tokens
   - Security headers on every response (nosniff, CSP, X-Frame-Options, Referrer-Policy, COOP, CORP)
   - Fixed MIME table (not the Windows registry); inline only for images/video/audio/PDF/plain text; HTML/SVG/unknown are attachments; file CSP has `sandbox` (except PDF)
   - Uploads stream to `.burrow-upload-*.tmp`, then hard-link into place (atomic no-overwrite; falls back to check+rename on FAT/exFAT); collisions → `name (1).ext`; names sanitised to Windows-safe rules on every OS. Fuzz: `FuzzSanitizeUploadName`.
@@ -74,11 +77,39 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 - Verified in desktop Chrome (2026-11-27): grid, viewer + arrows, HEIC fallback, video seek, back button, rename, upload (collision → "(1)"), search, delete, text viewer XSS check, service worker install + shell cache, 6300-file folder. No console errors.
 - CI: new "Web app" job (npm ci, typecheck, build, npm audit, Go build with embedded app). Run 45941183114 green.
 
+### Phase 3 (2026-11-27)
+- `internal/auth`: argon2id (m=64 MiB, t=3, p=2, PHC string, strict parse, fuzzed). Sessions: 256-bit random tokens, only SHA-256 stored in `<appdata>/auth/sessions.json` (0600), per-session CSRF token, 12 h normal / 30 d sliding "remember", max 100 sessions, password change logs out all. Lockout: 5 free tries per client IP, then 1 min doubling to 1 h.
+- API: every endpoint behind `authed`; changes behind `write` = session + CSRF + not read-only; logout = session + CSRF. Cookie `burrow_session`: HttpOnly, SameSite=Strict, Secure when TLS, Max-Age only with remember. Login/lockout events printed in the terminal.
+- CLI: first run prompts for a password (hidden, twice, ≥8 chars); `--password-file` (only sets if none exists unless `--reset-password`); `--reset-password`; `--version`; QR code of the tailnet URL (rsc.io/qr, half-block, explicit colours, ANSI enabled on Windows).
+- Web: glass login screen (password-manager friendly, remember switch, shake, lockout countdown), "Can't reach your PC" screen, 401 → back to login, Log Out in ⋯ menu.
+- Packaging: `.goreleaser.yaml` (6 targets, CGO off, reproducible, checksums, draft release, Homebrew cask w/ quarantine removal — needs tap + token, winget manifests generated with skip_upload). `release.yml` on v* tags. `install.sh` + `install.ps1` (checksum-verified; `BURROW_VERSION`, `BURROW_INSTALL_DIR`, `BURROW_DOWNLOAD_URL`). `installers.yml` runs both against a snapshot on real Linux/macOS/Windows runners. Local snapshot release verified (6 × ~10 MB); install.ps1 verified locally.
+- Docs: README quick start, `docs/setup-{windows,macos,linux}.md` (incl. auto-start: Task Scheduler / launchd / systemd), `SECURITY.md`, `CONTRIBUTING.md`.
+
+### Phase 3 security self-review (§4)
+| # | Rule | Status |
+|---|---|---|
+| 1 | Folder jail | ✅ os.Root everywhere (files, thumbs, index walk, trash, cleanup); Clean() + fuzz (Clean, JailOpen, upload names). Symlinks resolved via jail; escaping ones hidden. |
+| 2 | Not on public internet | ✅ tsnet + 127.0.0.1 only; Host allowlist per listener (DNS rebinding). |
+| 3 | Login always | ✅ fixed this phase: argon2id, lockout, terminal warnings. |
+| 4 | Sessions/CSRF | ✅ fixed this phase. Note: cookie not `Secure` on http://127.0.0.1 (loopback only) — documented. |
+| 5 | Safe serving | ✅ fixed MIME table, nosniff, attachment by default, sandbox CSP on files, strict app CSP; **added HSTS** on the tailnet listener. PDF can't be sandboxed (viewer limitation). |
+| 6 | Uploads | ✅ sanitised, temp+hard-link, never overwrite; **added cleanup** of temp files left by crashes (>24 h). |
+| 7 | Read-only | ✅ all write endpoints; logout still allowed. |
+| 8 | AI privacy | n/a until Phase 5. |
+| 9 | Supply chain | ✅ govulncheck + npm audit in CI; **added CodeQL** workflow (runs once repo is public); exact-pinned npm deps, ignore-scripts. |
+| 10 | No telemetry | ⚠️→✅ **found tsnet uploads logs to log.tailscale.com by default — now disabled** with `logtail.Disable()`. |
+| — | Other | Errors never leak paths; JSON bodies ≤64 KB; ReadHeaderTimeout; secrets never logged; data dir 0700. |
+
 ## Next
 - [x] CI green on Linux + Windows for the Phase 1 code → Phase 1 done
 - [x] Phase 2 code: thumbnails, PWA, embedding, CI
 - [x] [HUMAN] Phase 2 phone test — owner confirmed "all looks good" (2026-11-27)
-- [ ] Then Phase 3: login, sessions, CSRF tokens, QR code, packaging
+- [x] Phase 3 code: login, sessions, CSRF, QR, hardening, packaging, docs
+- [ ] [HUMAN] Run burrow in a terminal and set the real password
+- [ ] [HUMAN] Decide: make repo public now (needed for installers/releases to download without a GitHub login), or at launch
+- [ ] [HUMAN] Fresh-machine test: install → phone access in < 5 minutes following only the README
+- [ ] [HUMAN] Optional: create github.com/sandeeda/homebrew-tap + HOMEBREW_TAP_TOKEN secret
+- [ ] Then Phase 4: launch prep
 
 ## Open questions
 - When to make the repo public? Proposed: at v0.1.0 launch (Phase 4). Free CodeQL only runs on public repos.
@@ -96,6 +127,9 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 - Rename is in-place only (`{path, name}`); moving between folders isn't in scope.
 - CSRF before Phase 3: `CrossOriginProtection` + custom header. Real CSRF tokens come with sessions in Phase 3.
 - Dependency added: `modernc.org/sqlite` (pure-Go SQLite, widely used, actively maintained) — required by the tech stack.
+- Dependency added: `rsc.io/qr` (QR encoding; tiny, no deps, by Russ Cox) — for the terminal QR code. `golang.org/x/crypto` (argon2) and `golang.org/x/term` (hidden password input) were already indirect deps via tsnet.
+- Sharing a folder that *contains* the app data dir stays **refused** for v0.1 (simple + safe). Allowing it would need identity checks on every path (symlinks can alias the data dir) and blocking deletes/renames of its ancestors — revisit if users ask.
+- Releases are drafts; the owner publishes them.
 - Dependency added: `golang.org/x/image` (Go team; WebP decoding + high-quality scaling) — already an indirect dep via tsnet.
 - Frontend deps pinned to exact versions at least 2 weeks old (supply-chain caution); `ignore-scripts=true`. No PWA plugin — the manifest and service worker are hand-written (~70 lines).
 - Hash routing (`#/folder/sub`) so the server needs no SPA fallback routes.
@@ -105,7 +139,6 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 - UI theme (owner request, 2026-11-27): "liquid glass" with iOS feel and spring animations. Frosted translucent material (backdrop blur + saturation, edge highlights, sheen), iOS 26-style layout (large collapsing title, glass circle buttons, floating bottom search bar + add button), Photos-style grid, drag-to-dismiss sheets, iOS alerts, pull-down menu. Springs: pre-computed CSS `linear()` curves + a ~90-line JS spring (`web/src/spring.ts`) for gesture-driven motion — no animation library. Viewer: finger-following swipe with rubber-band, flick velocity, drag-down to close, pinch + double-tap zoom with momentum pan. Light and dark follow the system setting automatically. Respects Reduce Motion and Reduce Transparency.
 
 ## Known issues
-- **No login yet (Phase 3).** Anyone on the owner's tailnet (his own devices) can use the API. Localhost is protected from websites by the Host check + CSRF guards.
 - Sharing a folder that *contains* the app data dir (e.g. the whole home folder) is refused. Better fix for the Phase 3 review: allow it but hide/deny the app data dir inside the jail.
 - Delete copies to trash, so deleting a very large folder takes as long as copying it (trash is usually on a different drive). Could add a same-volume fast path later.
 - Trash is never emptied automatically.
