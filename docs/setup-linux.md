@@ -57,7 +57,17 @@ Adjust the `burrow` path (`command -v burrow`) and the folder. To keep it runnin
 
 Logs: `journalctl --user -u burrow -f`.
 
-**Headless or first run without a terminal?** Put the password in a file readable only by you (`chmod 600`) and add `--password-file /path/to/file` once. Burrow only uses it to set the password if none exists (add `--reset-password` to replace it), so you can delete the file afterwards.
+**Headless or first run without a terminal?** Just start it. With no password set, Burrow shows a **"Welcome to Burrow"** screen where you choose the password from your phone. Only devices signed in to the same Tailscale account as this machine can do that. Alternatively, put the password in a file readable only by you (`chmod 600`) and add `--password-file /path/to/file` once. Burrow only uses it if no password exists yet (add `--reset-password` to replace it), so you can delete the file afterwards.
+
+## Optional: video previews
+
+Install **ffmpeg** and restart Burrow to see a preview frame for each video:
+
+```sh
+sudo apt install ffmpeg   # or your distro's package manager
+```
+
+Burrow prints `Video thumbnails: on` at startup when it finds ffmpeg. To use a specific ffmpeg, set `BURROW_FFMPEG=/path/to/ffmpeg`.
 
 ## Troubleshooting
 

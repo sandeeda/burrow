@@ -32,6 +32,11 @@ Please **don't open a public issue**. Use GitHub's private reporting instead: **
 - The app has a strict Content-Security-Policy: no inline scripts and no third-party code. HSTS is on for the HTTPS address.
 - The app's offline cache holds **only the app itself**, never your files or folder listings.
 
+### Thumbnails
+- Images are decoded only after checking their dimensions (decompression-bomb limit of 100 megapixels). The HEIC decoder is pure Go; any crash inside it is caught and the file simply gets no thumbnail. It is fuzz-tested in CI.
+- Video previews use ffmpeg **if you installed it**. ffmpeg never gets a path on your disk: Burrow opens the video through its folder jail and hands it to ffmpeg over a private `127.0.0.1` address with a random one-time link. ffmpeg is limited to that one connection, and the video format is fixed from the file extension, so a disguised playlist can't make it read other files (this is tested).
+- Thumbnails are cached in Burrow's data folder, never in your shared folder.
+
 ### Uploads
 - File names are cleaned to rules that are safe on every OS.
 - Uploads stream to a temporary file and are then moved into place atomically. **Existing files are never overwritten**: a second `photo.jpg` becomes `photo (1).jpg`.

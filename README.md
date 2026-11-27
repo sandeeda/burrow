@@ -18,7 +18,7 @@ $ burrow ~/Pictures
 ## What you get
 
 - 📱 **A phone app** you can add to your home screen (iPhone and Android): clean, fast, with smooth spring animations and swipe gestures.
-- 🖼️ **Photos** in a grid with thumbnails and a swipeable viewer with pinch-zoom. **Videos** stream with seeking, even very large ones.
+- 🖼️ **Photos** in a grid with thumbnails (including iPhone **HEIC**) and a swipeable viewer with pinch-zoom. **Videos** stream with seeking, even very large ones, with preview frames if ffmpeg is installed.
 - ⬆️ **Uploads** from your camera or files. Nothing is ever overwritten.
 - 🔎 **Search** by file name across the whole folder.
 - ✏️ **Rename, new folder, delete.** Deleted items go to Burrow's trash on your PC, so you can recover them.
@@ -41,6 +41,8 @@ You don't need to install Tailscale on your PC, because Burrow has it built in.
 **macOS / Linux**
 ```sh
 curl -fsSL https://raw.githubusercontent.com/sandeeda/burrow/main/install.sh | sh
+# or, with Homebrew:
+brew install sandeeda/tap/burrow
 ```
 
 **Windows** (PowerShell)
@@ -100,8 +102,8 @@ On the PC, run `burrow --reset-password <folder>`.
 **Where does Burrow keep its own data?**
 In `%APPDATA%\burrow` (Windows), `~/Library/Application Support/burrow` (macOS) or `~/.config/burrow` (Linux). This holds the Tailscale identity, password hash, search index, thumbnails and trash. It is never inside the shared folder, and Burrow refuses to share a folder that contains it.
 
-**iPhone HEIC photos don't show thumbnails.**
-That's a known gap for now: they show an icon. They open fine in Safari, and other browsers offer a download.
+**Do I need anything else installed?**
+No. Optionally, install **ffmpeg** to get preview frames for videos (`winget install Gyan.FFmpeg`, `brew install ffmpeg` or `sudo apt install ffmpeg`) and restart Burrow. Burrow says at startup whether video previews are on. iPhone HEIC photos work without anything extra.
 
 ## Building from source
 

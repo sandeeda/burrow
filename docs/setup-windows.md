@@ -54,6 +54,16 @@ Register-ScheduledTask -TaskName "Burrow" -Action $action -Trigger $trigger -Set
 
 Burrow will start in a small window each time you log in. To remove it: `Unregister-ScheduledTask -TaskName Burrow`.
 
+## Optional: video previews
+
+Install **ffmpeg** and restart Burrow to see a preview frame for each video:
+
+```sh
+winget install Gyan.FFmpeg
+```
+
+Burrow prints `Video thumbnails: on` at startup when it finds ffmpeg. To use a specific ffmpeg, set `BURROW_FFMPEG=/path/to/ffmpeg`.
+
 ## Troubleshooting
 
 | Problem | Fix |

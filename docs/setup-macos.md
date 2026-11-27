@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/sandeeda/burrow/main/install.sh | s
 
 This picks the right build, verifies its checksum and installs `burrow` to `/usr/local/bin` (or `~/.local/bin`, and tells you if that needs adding to your PATH).
 
-Homebrew users, once the tap is published: `brew install sandeeda/tap/burrow`.
+With Homebrew: `brew install sandeeda/tap/burrow`.
 
 ## 3. First run
 
@@ -65,6 +65,16 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.burrow.plist
 To share a protected folder (Pictures, Documents…) from the background, macOS may need you to add `burrow` under **System Settings → Privacy & Security → Files and Folders** (or Full Disk Access).
 
 Stop and remove it: `launchctl bootout gui/$(id -u)/dev.burrow && rm ~/Library/LaunchAgents/dev.burrow.plist`.
+
+## Optional: video previews
+
+Install **ffmpeg** and restart Burrow to see a preview frame for each video:
+
+```sh
+brew install ffmpeg
+```
+
+Burrow prints `Video thumbnails: on` at startup when it finds ffmpeg. To use a specific ffmpeg, set `BURROW_FFMPEG=/path/to/ffmpeg`.
 
 ## Troubleshooting
 

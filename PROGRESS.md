@@ -1,7 +1,7 @@
 # Burrow — Progress
 
 ## Current phase
-**Phase 3 — Login, security hardening, packaging** — code, packaging and docs done; waiting on [HUMAN] steps (set real password, decide when to go public, 5-minute fresh-install test).
+**Phase 3 — Login, security hardening, packaging** — all done except the [HUMAN] 5-minute fresh-machine test. Since then (owner requests, 2026-11-27): repo public, Homebrew tap, HEIC + video thumbnails, Airbnb-inspired redesign.
 
 Phase 2 ✅ DONE (2026-11-27): owner tested on phone — installed, browsing, photos, video, uploads all good. Follow-up tweaks from his testing: liquid-glass iOS theme, double-tap zoom-out fix, upload panel auto-hide.
 
@@ -105,10 +105,10 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 - [x] Phase 2 code: thumbnails, PWA, embedding, CI
 - [x] [HUMAN] Phase 2 phone test — owner confirmed "all looks good" (2026-11-27)
 - [x] Phase 3 code: login, sessions, CSRF, QR, hardening, packaging, docs
-- [ ] [HUMAN] Run burrow in a terminal and set the real password
-- [ ] [HUMAN] Decide: make repo public now (needed for installers/releases to download without a GitHub login), or at launch
+- [x] [HUMAN] Password set by the owner (2026-11-27)
+- [x] Repo made public at owner's request (2026-11-27) after a history scan for secrets (none; author email is visible in commits). Private vulnerability reporting on; topics added. CodeQL now runs (first scan green).
 - [ ] [HUMAN] Fresh-machine test: install → phone access in < 5 minutes following only the README
-- [ ] [HUMAN] Optional: create github.com/sandeeda/homebrew-tap + HOMEBREW_TAP_TOKEN secret
+- [x] Homebrew: public repo sandeeda/homebrew-tap; SSH deploy key (write, that repo only) stored as secret HOMEBREW_TAP_DEPLOY_KEY; GoReleaser pushes Casks/burrow.rb on release. Verify `brew install sandeeda/tap/burrow` on macOS after v0.1.0 is published.
 - [ ] Then Phase 4: launch prep
 
 ## Open questions
@@ -135,7 +135,8 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 - Hash routing (`#/folder/sub`) so the server needs no SPA fallback routes.
 - Viewer shows 1280px previews instead of originals to save mobile data; "open original" is one tap away.
 - Uploads go one file at a time (more reliable on mobile than parallel).
-- No video thumbnails: would need ffmpeg. Videos show an icon + play badge.
+- HEIC via github.com/gen2brain/h265 v0.2.5 (pure Go, MIT, no deps; young project → size checks first, panic recovery, fuzzed in CI). Grid uses the embedded ~416px preview (~4 ms), viewer gets a 1280px render (0.1–0.25 s for 24 MP).
+- Video thumbnails need ffmpeg (optional; BURROW_FFMPEG or PATH). ffmpeg never gets a filesystem path: the file is opened through the jail and served on a 127.0.0.1 server under a one-time random URL; demuxer forced from the extension; -protocol_whitelist http,tcp. Tested against playlist/concat tricks. Installed on the owner's PC via winget (Gyan.FFmpeg 9.1).
 - UI design (owner request, 2026-11-27, third iteration): Burrow's own look, inspired by Airbnb (also CRED, Wise) — not a copy of iOS. White/near-black surfaces, one vivid violet brand (#6A45FF, gradient #8B5CFF→#5B34F0; no brown anywhere, logo redrawn: white rabbit on violet), Plus Jakarta Sans (OFL, bundled via @fontsource-variable — no external font requests), big rounded cards + soft shadows, sticky header with Airbnb-style search pill and icon category chips (All/Photos/Videos/Docs/Folders — real filters), folder cards section + rounded photo tiles, bottom tab bar (Home, Search, + Upload, Menu), bottom sheets with icon rows, dialogs with close button + floating-label fields, black viewer with white round buttons. Spring motion + gestures kept. Earlier iterations (warm "liquid glass", then iOS-system clone) were rejected by the owner.
 
 ## Known issues
@@ -143,7 +144,6 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 - Delete copies to trash, so deleting a very large folder takes as long as copying it (trash is usually on a different drive). Could add a same-volume fast path later.
 - Trash is never emptied automatically.
 - PDF responses can't use CSP `sandbox` (browser PDF viewers refuse it). PDFs open in a new tab; check on the phone.
-- HEIC (iPhone photos): no thumbnails yet (icon shown); viewer works in Safari only, other browsers get a download button. Known gap per CLAUDE.md.
 - iPhone .MOV (HEVC) videos may not play in Chrome on Android/Windows; Safari is fine.
 - Thumbnail cache is never pruned (~15 KB per grid thumbnail, ~200 KB per viewed photo).
 - Symlink tests skip on the owner's Windows machine (needs Developer Mode); they run in Linux CI.
@@ -153,7 +153,5 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 - Restore from trash / empty trash in the UI
 - Move files between folders
 - Same-volume fast path for delete
-- HEIC thumbnails (needs a decoder — pure-Go options are limited; maybe use the embedded JPEG preview inside HEIC files)
-- Video thumbnails (ffmpeg if installed)
 - Pinch-zoom inside the in-app photo viewer (today: "open original" for full zoom)
 - Thumbnail cache size limit
