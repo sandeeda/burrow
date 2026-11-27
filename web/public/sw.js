@@ -1,7 +1,9 @@
 // Burrow service worker: caches the app shell only.
 // File contents and API responses are NEVER cached — they always come from
 // your PC, so nothing private is left on the phone.
-const CACHE = 'burrow-shell-v1'
+// Bump when cached shell files change in place (v2: new violet logo), so
+// phones drop old copies when the new worker activates.
+const CACHE = 'burrow-shell-v2'
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
 
 self.addEventListener('install', (event) => {
@@ -58,6 +60,18 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.pathname.startsWith('/icons/') || url.pathname === '/manifest.webmanifest') {
-    event.respondWith(caches.match(req).then((hit) => hit || fetch(req)))
+    // Network first: these keep their names when the logo changes, so a
+    // cache-first copy would go stale forever. Cache is the offline fallback.
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res.ok) {
+            const copy = res.clone()
+            caches.open(CACHE).then((c) => c.put(req, copy))
+          }
+          return res
+        })
+        .catch(() => caches.match(req)),
+    )
   }
 })
