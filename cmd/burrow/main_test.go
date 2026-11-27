@@ -1,30 +1,51 @@
 package main
 
 import (
-	"net/http"
-	"net/http/httptest"
-	"strings"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 )
 
-func TestHelloHandler(t *testing.T) {
-	h := newHandler()
+func TestCheckNotNested(t *testing.T) {
+	base := t.TempDir()
+	home := filepath.Join(base, "home")
+	data := filepath.Join(home, ".config", "burrow")
+	docs := filepath.Join(home, "Documents")
 
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET / = %d, want 200", rec.Code)
+	if err := checkNotNested(docs, data); err != nil {
+		t.Errorf("Documents should be allowed: %v", err)
 	}
-	if !strings.Contains(rec.Body.String(), "Hello from Burrow") {
-		t.Error("body missing greeting")
+	if err := checkNotNested(home, data); err == nil {
+		t.Error("sharing home (contains app data) should be refused")
 	}
-	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
-		t.Errorf("nosniff header = %q", got)
+	if err := checkNotNested(data, data); err == nil {
+		t.Error("sharing the app data dir should be refused")
 	}
+	if err := checkNotNested(filepath.Join(data, "trash"), data); err == nil {
+		t.Error("sharing inside the app data dir should be refused")
+	}
+	if err := checkNotNested(filepath.Join(home, ".config", "burrow-other"), data); err != nil {
+		t.Errorf("sibling with common prefix should be allowed: %v", err)
+	}
+	if err := os.MkdirAll(data, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "home-link")
+	if os.Symlink(home, link) == nil {
+		if err := checkNotNested(link, data); err == nil {
+			t.Error("sharing a symlink to home should be refused")
+		}
+	}
+	if runtime.GOOS == "windows" {
+		if err := checkNotNested(filepath.Join(base, "HOME"), data); err == nil {
+			t.Error("case-insensitive match should be refused on Windows")
+		}
+	}
+}
 
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/nope", nil))
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("GET /nope = %d, want 404", rec.Code)
+func TestIndexFileNameDiffersPerFolder(t *testing.T) {
+	if indexFileName("/a") == indexFileName("/b") {
+		t.Error("index names collide")
 	}
 }

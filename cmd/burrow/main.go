@@ -3,35 +3,46 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"tailscale.com/tsnet"
 
+	"github.com/sandeeda/burrow/internal/api"
 	"github.com/sandeeda/burrow/internal/config"
+	"github.com/sandeeda/burrow/internal/fsjail"
+	"github.com/sandeeda/burrow/internal/index"
 )
 
-const (
-	hostname  = "burrow"
-	localAddr = "127.0.0.1:8080" // never 0.0.0.0 — see CLAUDE.md §4.2
-)
+const rescanInterval = 5 * time.Minute
 
 func main() {
-	if err := run(); err != nil && !errors.Is(err, context.Canceled) {
+	cfg, err := config.Parse(os.Args[1:], os.Stderr)
+	if errors.Is(err, config.ErrHelp) {
+		return
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "burrow: %v\n", err)
+		os.Exit(2)
+	}
+	if err := run(cfg); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("burrow: %v", err)
 	}
 }
 
-func run() error {
+func run(cfg *config.Config) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -39,44 +50,110 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if err := checkNotNested(cfg.Folder, dataDir); err != nil {
+		return err
+	}
+
+	jail, err := fsjail.Open(cfg.Folder)
+	if err != nil {
+		return err
+	}
+	defer jail.Close()
+
+	ix, err := index.Open(filepath.Join(dataDir, indexFileName(cfg.Folder)), jail)
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+	go ix.Run(ctx, rescanInterval)
+
+	srv := api.New(api.Options{
+		Jail:     jail,
+		Index:    ix,
+		TrashDir: filepath.Join(dataDir, "trash"),
+		ReadOnly: cfg.ReadOnly,
+	})
+
+	fmt.Printf("📁 Sharing:   %s", cfg.Folder)
+	if cfg.ReadOnly {
+		fmt.Print("  (read-only)")
+	}
+	fmt.Println()
+
+	// Local listener first, so localhost works even before Tailscale is up.
+	// Never 0.0.0.0 — see CLAUDE.md §4.2.
+	localAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(cfg.Port))
+	localLn, err := net.Listen("tcp", localAddr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", localAddr, err)
+	}
+	fmt.Printf("🏠 Local:     http://%s\n", localAddr)
+	go serve(localLn, srv.Handler(localAddr, "localhost:"+strconv.Itoa(cfg.Port)))
 
 	tsLog := func(string, ...any) {}
 	if os.Getenv("BURROW_DEBUG") != "" {
 		tsLog = log.Printf
 	}
 	ts := &tsnet.Server{
-		Hostname: hostname,
+		Hostname: cfg.Hostname,
 		Dir:      filepath.Join(dataDir, "tsnet"),
 		Logf:     tsLog,
 		UserLogf: tsLog,
 	}
 	defer ts.Close()
 
-	handler := newHandler()
-
-	// Local listener first, so localhost works even before Tailscale is up.
-	localLn, err := net.Listen("tcp", localAddr)
-	if err != nil {
-		return fmt.Errorf("listen on %s: %w", localAddr, err)
-	}
-	fmt.Printf("🏠 Local:     http://%s\n", localAddr)
-	go serve(localLn, handler)
-
 	dnsName, err := waitForTailscale(ctx, ts)
 	if err != nil {
 		return err
 	}
-
 	tlsLn, err := listenTLSWithRetry(ctx, ts)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("✅ Burrow is live at https://%s\n", dnsName)
-	go serve(tlsLn, handler)
+	go serve(tlsLn, srv.Handler(dnsName, dnsName+":443"))
 
 	<-ctx.Done()
 	fmt.Println("\nShutting down.")
 	return nil
+}
+
+// checkNotNested refuses to share a folder that contains Burrow's own data
+// (Tailscale keys, index, trash), or that lives inside it.
+func checkNotNested(folder, dataDir string) error {
+	// Resolve symlinks and Windows 8.3 short names (C:\Users\JOHNSM~1) so
+	// different spellings of the same folder compare equal.
+	folder, dataDir = canonical(folder), canonical(dataDir)
+	if within(dataDir, folder) {
+		return fmt.Errorf("can't share %s: it contains Burrow's private data folder (%s). Share a subfolder instead, e.g. Documents", folder, dataDir)
+	}
+	if within(folder, dataDir) {
+		return fmt.Errorf("can't share %s: it is inside Burrow's data folder", folder)
+	}
+	return nil
+}
+
+func canonical(p string) string {
+	if c, err := filepath.EvalSymlinks(p); err == nil {
+		return c
+	}
+	return p
+}
+
+// within reports whether path is dir or inside it.
+func within(path, dir string) bool {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		// Case-insensitive file systems by default.
+		path, dir = strings.ToLower(path), strings.ToLower(dir)
+	}
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && (rel == "." || filepath.IsLocal(rel))
+}
+
+// indexFileName gives each shared folder its own index database.
+func indexFileName(folder string) string {
+	sum := sha256.Sum256([]byte(folder))
+	return "index-" + hex.EncodeToString(sum[:8]) + ".db"
 }
 
 // waitForTailscale starts tsnet, prints the login URL if the device is not yet
@@ -146,27 +223,10 @@ func serve(ln net.Listener, h http.Handler) {
 	srv := &http.Server{
 		Handler:           h,
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		// No ReadTimeout/WriteTimeout: uploads and video streams can be long.
 	}
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
 		log.Printf("server on %s stopped: %v", ln.Addr(), err)
 	}
 }
-
-func newHandler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
-		io.WriteString(w, helloPage)
-	})
-	return mux
-}
-
-const helloPage = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Burrow</title>
-<style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:90vh;margin:0}h1{font-size:2rem}</style>
-</head><body><h1>Hello from Burrow 🐇</h1></body></html>
-`
