@@ -17,7 +17,7 @@ import (
 
 	"tailscale.com/tsnet"
 
-	"github.com/burrow-placeholder/burrow/internal/config"
+	"github.com/sandeeda/burrow/internal/config"
 )
 
 const (

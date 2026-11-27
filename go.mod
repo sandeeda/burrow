@@ -1,4 +1,4 @@
-module github.com/burrow-placeholder/burrow
+module github.com/sandeeda/burrow
 
 go 1.27.4
 

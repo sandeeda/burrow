@@ -25,10 +25,10 @@ Phase 0 ✅ DONE (2026-11-26): owner saw "Hello from Burrow" on phone over mobil
 - [ ] SQLite filename index (`modernc.org/sqlite`), startup walk + change watching
 - [ ] Endpoint unit + integration tests
 - [ ] CI (Linux + Windows): test, vet, govulncheck, short fuzz run
-- [ ] [HUMAN] `gh auth login` → replace placeholder module path `github.com/burrow-placeholder/burrow`, create repo, push
+- [x] [HUMAN] `gh auth login` done → module path `github.com/sandeeda/burrow`, repo created (private), pushed
 
 ## Open questions
-- GitHub username (module path is a placeholder until then)
+- When to make the repo public? (Proposed: at the v0.1.0 launch, Phase 4. Note: free CodeQL code scanning only works on public repos, so it will run once the repo is public.)
 
 ## Decisions
 - Default branch `main`.
