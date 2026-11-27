@@ -1072,6 +1072,17 @@ a {
   animation: rise var(--t-bouncy) var(--spring-bouncy) both;
 }
 
+.uploads.leaving {
+  animation: sink 280ms ease-in both;
+}
+
+@keyframes sink {
+  to {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+}
+
 @keyframes rise {
   from {
     opacity: 0;

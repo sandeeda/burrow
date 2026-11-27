@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { upload, type Entry, type UploadHandle } from './api'
 import { CloseIcon } from './icons'
 import { formatSize } from './util'
@@ -72,16 +72,36 @@ export function useUploads(onUploaded: (dir: string, files: Entry[]) => void) {
   return { items, add, cancelAll, clearFinished }
 }
 
+const CANCELLED = new Set(['Cancelled', 'Upload cancelled'])
+const AUTO_HIDE_MS = 2500
+
 export function UploadPanel({ items, onCancel, onClear }: { items: UploadItem[]; onCancel: () => void; onClear: () => void }) {
-  if (!items.length) return null
+  const [leaving, setLeaving] = useState(false)
   const active = items.filter((i) => i.status === 'queued' || i.status === 'uploading')
-  const failed = items.filter((i) => i.status === 'error')
+  const failed = items.filter((i) => i.status === 'error' && !CANCELLED.has(i.error ?? ''))
+  const finished = items.length > 0 && active.length === 0
+
+  // When everything went through, show "Uploaded" briefly, then slide away.
+  // Failures stay until dismissed so they aren't missed. New uploads arriving
+  // during the countdown cancel it.
+  useEffect(() => {
+    setLeaving(false)
+    if (!finished || failed.length) return
+    const hide = window.setTimeout(() => setLeaving(true), AUTO_HIDE_MS)
+    const clear = window.setTimeout(onClear, AUTO_HIDE_MS + 300)
+    return () => {
+      window.clearTimeout(hide)
+      window.clearTimeout(clear)
+    }
+  }, [finished, failed.length, items.length, onClear])
+
+  if (!items.length) return null
   const total = items.reduce((s, i) => s + i.total, 0)
   const loaded = items.reduce((s, i) => s + (i.status === 'done' ? i.total : i.loaded), 0)
   const pct = total ? Math.round((loaded / total) * 100) : 100
 
   return (
-    <div className="uploads glass" role="status" aria-live="polite">
+    <div className={'uploads glass' + (leaving ? ' leaving' : '')} role="status" aria-live="polite">
       <div className="uploads-head">
         <strong>
           {active.length
