@@ -18,6 +18,7 @@ export type Session = {
   readOnly: boolean
   needsSetup?: boolean // no password yet, and this device may choose it
   setupBlocked?: boolean // no password yet, but this device may not choose it
+  videoThumbs?: boolean // the PC can make video previews (ffmpeg installed)
 }
 
 export class ApiError extends Error {

@@ -3,6 +3,7 @@ import { api, setCsrf, UNAUTHORIZED_EVENT, type Info, type Session } from './api
 import { App } from './App'
 import { Login } from './Login'
 import { Setup } from './Setup'
+import { setVideoThumbs } from './util'
 
 type State =
   | { kind: 'checking' }
@@ -19,6 +20,7 @@ export function Root() {
   const accept = useCallback((s: Session) => {
     if (s.authenticated && s.csrf) {
       setCsrf(s.csrf)
+      setVideoThumbs(!!s.videoThumbs)
       setState({ kind: 'in', info: { name: s.name ?? 'Burrow', readOnly: s.readOnly } })
     } else {
       setCsrf('')

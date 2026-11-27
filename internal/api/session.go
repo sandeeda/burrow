@@ -72,6 +72,7 @@ type sessionInfo struct {
 	CSRF          string `json:"csrf,omitempty"`
 	Name          string `json:"name,omitempty"`
 	ReadOnly      bool   `json:"readOnly"`
+	VideoThumbs   bool   `json:"videoThumbs,omitempty"` // video previews available (ffmpeg)
 	// No password yet: NeedsSetup if this device may choose it,
 	// SetupBlocked if it may not (e.g. another Tailscale user).
 	NeedsSetup   bool `json:"needsSetup,omitempty"`
@@ -159,7 +160,13 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) infoFor(sess *auth.Session) sessionInfo {
-	return sessionInfo{Authenticated: true, CSRF: sess.CSRF, Name: filepath.Base(s.jail.Dir()), ReadOnly: s.readOnly}
+	return sessionInfo{
+		Authenticated: true,
+		CSRF:          sess.CSRF,
+		Name:          filepath.Base(s.jail.Dir()),
+		ReadOnly:      s.readOnly,
+		VideoThumbs:   s.thumbs != nil && s.thumbs.VideoEnabled(),
+	}
 }
 
 type loginRequest struct {

@@ -11,7 +11,13 @@ const imageExt = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'h
 const videoExt = new Set(['mp4', 'm4v', 'mov', 'webm', 'mkv', 'ogv'])
 const audioExt = new Set(['mp3', 'm4a', 'aac', 'wav', 'ogg', 'oga', 'opus', 'flac'])
 const textExt = new Set(['txt', 'md', 'log', 'csv', 'json', 'yaml', 'yml', 'ini'])
-const thumbExt = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp'])
+const thumbExt = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'])
+
+// Video previews need ffmpeg on the PC; the server says whether it has it.
+let videoThumbs = false
+export const setVideoThumbs = (on: boolean) => {
+  videoThumbs = on
+}
 
 export function kindOf(e: Entry): Kind {
   if (e.isDir) return 'folder'
@@ -25,7 +31,7 @@ export function kindOf(e: Entry): Kind {
 }
 
 /** Whether the server can make a thumbnail for this file. */
-export const hasThumb = (e: Entry) => !e.isDir && thumbExt.has(ext(e.name))
+export const hasThumb = (e: Entry) => !e.isDir && (thumbExt.has(ext(e.name)) || (videoThumbs && videoExt.has(ext(e.name))))
 
 /** HEIC and friends only display natively on Apple devices. */
 export const isHeic = (e: Entry) => ['heic', 'heif'].includes(ext(e.name))

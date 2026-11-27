@@ -128,6 +128,13 @@ function Tile({ entry, delay, onOpen, onMenu }: ItemProps & { delay: number }) {
     <li style={{ '--i': delay } as React.CSSProperties}>
       <button className={'tile ' + style} onClick={() => !lp.consumed() && onOpen(entry)} aria-label={entry.name} title={entry.name} {...lp.handlers}>
         {style === 'photo' && <Thumb entry={entry} size={32} />}
+        {style === 'photo' && kind === 'video' && (
+          <span className="play-badge" aria-hidden="true">
+            <svg width="10" height="10" viewBox="0 0 16 16">
+              <path d="M5 3.2v9.6a.8.8 0 0 0 1.2.7l7.4-4.8a.8.8 0 0 0 0-1.4L6.2 2.5A.8.8 0 0 0 5 3.2z" fill="currentColor" />
+            </svg>
+          </span>
+        )}
         {style === 'video' && <PlayButton />}
         {style === 'doc' && <KindIcon entry={entry} size={44} />}
         {style !== 'photo' && <span className="tile-name">{entry.name}</span>}

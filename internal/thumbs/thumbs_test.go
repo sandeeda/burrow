@@ -11,11 +11,16 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/gen2brain/h265/heic"
 
 	"github.com/sandeeda/burrow/internal/fsjail"
 )
@@ -33,7 +38,7 @@ func testImage(w, h int) *image.RGBA {
 	return img
 }
 
-func encodeJPEG(t *testing.T, img image.Image) []byte {
+func mustJPEG(t testing.TB, img image.Image) []byte {
 	var b bytes.Buffer
 	if err := jpeg.Encode(&b, img, nil); err != nil {
 		t.Fatal(err)
@@ -109,11 +114,11 @@ func TestFormats(t *testing.T) {
 	gif.Encode(&gifBuf, testImage(300, 600), nil)
 	webpData, _ := base64.StdEncoding.DecodeString(tinyWebP)
 	c, _ := newCache(t, map[string][]byte{
-		"a.jpg":      encodeJPEG(t, testImage(1000, 500)),
+		"a.jpg":      mustJPEG(t, testImage(1000, 500)),
 		"b.PNG":      pngBuf.Bytes(),
 		"c.gif":      gifBuf.Bytes(),
 		"d.webp":     webpData,
-		"small.jpeg": encodeJPEG(t, testImage(100, 50)),
+		"small.jpeg": mustJPEG(t, testImage(100, 50)),
 	})
 	tests := []struct {
 		name string
@@ -135,7 +140,7 @@ func TestFormats(t *testing.T) {
 }
 
 func TestEXIFOrientation(t *testing.T) {
-	base := encodeJPEG(t, testImage(400, 200))
+	base := mustJPEG(t, testImage(400, 200))
 	files := map[string][]byte{}
 	for o := uint16(1); o <= 8; o++ {
 		files[string(rune('0'+o))+"-le.jpg"] = withOrientation(base, o, binary.LittleEndian)
@@ -176,7 +181,7 @@ func TestOrientPixels(t *testing.T) {
 }
 
 func TestMalformedEXIFIgnored(t *testing.T) {
-	base := encodeJPEG(t, testImage(40, 20))
+	base := mustJPEG(t, testImage(40, 20))
 	bad := withOrientation(base, 6, binary.LittleEndian)
 	bad[4], bad[5] = 0xFF, 0xFF // segment length far past the end
 	if o := jpegOrientation(bytes.NewReader(bad)); o != 1 {
@@ -190,7 +195,7 @@ func TestMalformedEXIFIgnored(t *testing.T) {
 }
 
 func FuzzJPEGOrientation(f *testing.F) {
-	base := encodeJPEG(&testing.T{}, testImage(8, 8))
+	base := mustJPEG(f, testImage(8, 8))
 	f.Add(withOrientation(base, 6, binary.LittleEndian))
 	f.Add(withOrientation(base, 3, binary.BigEndian))
 	f.Add(base)
@@ -223,18 +228,21 @@ func TestDecompressionBombRejected(t *testing.T) {
 
 func TestUnsupportedAndInvalid(t *testing.T) {
 	c, _ := newCache(t, map[string][]byte{
-		"photo.heic": []byte("x"),
-		"clip.mp4":   []byte("x"),
-		"broken.jpg": []byte("not really a jpeg"),
-		"ok.jpg":     encodeJPEG(t, testImage(10, 10)),
+		"broken.heic": []byte("not really a heic"),
+		"clip.mp4":    []byte("x"),
+		"broken.jpg":  []byte("not really a jpeg"),
+		"ok.jpg":      mustJPEG(t, testImage(10, 10)),
 	})
-	for _, p := range []string{"photo.heic", "clip.mp4", "page.html"} {
+	// Videos need ffmpeg, which this cache doesn't have.
+	for _, p := range []string{"clip.mp4", "page.html", "notes.txt"} {
 		if _, err := c.Get(p, 256); !errors.Is(err, ErrUnsupported) {
 			t.Errorf("Get(%s) = %v, want ErrUnsupported", p, err)
 		}
 	}
-	if _, err := c.Get("broken.jpg", 256); !errors.Is(err, ErrDecode) {
-		t.Error("broken.jpg: expected error")
+	for _, p := range []string{"broken.jpg", "broken.heic"} {
+		if _, err := c.Get(p, 256); !errors.Is(err, ErrDecode) {
+			t.Errorf("Get(%s) = %v, want ErrDecode", p, err)
+		}
 	}
 	if _, err := c.Get("ok.jpg", 999); err == nil {
 		t.Error("size 999: expected error")
@@ -246,9 +254,8 @@ func TestUnsupportedAndInvalid(t *testing.T) {
 		t.Errorf("missing: %v", err)
 	}
 }
-
 func TestCacheReuseAndInvalidation(t *testing.T) {
-	c, dir := newCache(t, map[string][]byte{"a.jpg": encodeJPEG(t, testImage(500, 500))})
+	c, dir := newCache(t, map[string][]byte{"a.jpg": mustJPEG(t, testImage(500, 500))})
 	first, err := c.Get("a.jpg", 256)
 	if err != nil {
 		t.Fatal(err)
@@ -261,7 +268,7 @@ func TestCacheReuseAndInvalidation(t *testing.T) {
 	}
 
 	// Editing the photo produces a different thumbnail file.
-	os.WriteFile(filepath.Join(dir, "a.jpg"), encodeJPEG(t, testImage(300, 600)), 0o644)
+	os.WriteFile(filepath.Join(dir, "a.jpg"), mustJPEG(t, testImage(300, 600)), 0o644)
 	later := time.Now().Add(time.Minute)
 	os.Chtimes(filepath.Join(dir, "a.jpg"), later, later)
 	third, err := c.Get("a.jpg", 256)
@@ -274,7 +281,7 @@ func TestCacheReuseAndInvalidation(t *testing.T) {
 }
 
 func TestConcurrentRequestsShareWork(t *testing.T) {
-	c, _ := newCache(t, map[string][]byte{"a.jpg": encodeJPEG(t, testImage(800, 800))})
+	c, _ := newCache(t, map[string][]byte{"a.jpg": mustJPEG(t, testImage(800, 800))})
 	var wg sync.WaitGroup
 	paths := make([]string, 16)
 	for i := range paths {
@@ -298,4 +305,135 @@ func TestConcurrentRequestsShareWork(t *testing.T) {
 	if len(entries) != 1 {
 		t.Errorf("expected 1 cache file, found %d", len(entries))
 	}
+}
+
+func encodeHEIC(t testing.TB, img image.Image) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	if err := heic.Encode(&b, img, heic.EncodeOptions{Quality: 60}); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+func TestHEIC(t *testing.T) {
+	c, _ := newCache(t, map[string][]byte{"IMG_0001.HEIC": encodeHEIC(t, testImage(600, 400))})
+	if !c.Supports("IMG_0001.HEIC") || !c.Supports("x.heif") {
+		t.Fatal("HEIC not supported")
+	}
+	if w, h := thumbSize(t, c, "IMG_0001.HEIC", 256); w != 256 || h != 170 {
+		t.Errorf("grid thumb = %dx%d, want 256x170", w, h)
+	}
+	if w, h := thumbSize(t, c, "IMG_0001.HEIC", 1280); w != 600 || h != 400 {
+		t.Errorf("viewer thumb = %dx%d, want 600x400 (never enlarged)", w, h)
+	}
+}
+
+// FuzzDecodeHEIC: whatever the bytes, decodeHEIC must return (not panic or
+// hang) — the third-party decoder runs on untrusted uploads.
+func FuzzDecodeHEIC(f *testing.F) {
+	f.Add(encodeHEIC(f, testImage(32, 24)))
+	f.Add([]byte("\x00\x00\x00\x18ftypheic\x00\x00\x00\x00heicmif1"))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		decodeHEIC(bytes.NewReader(data), 256)
+	})
+}
+
+func needFFmpeg(t *testing.T) string {
+	t.Helper()
+	ff := FindFFmpeg()
+	if ff == "" {
+		t.Skip("ffmpeg not installed")
+	}
+	return ff
+}
+
+// makeVideo writes a short test-pattern video using ffmpeg itself.
+func makeVideo(t *testing.T, ff, path string) {
+	t.Helper()
+	out, err := exec.Command(ff, "-hide_banner", "-loglevel", "error", "-y",
+		"-f", "lavfi", "-i", "testsrc=duration=2:size=640x360:rate=10",
+		"-c:v", "mpeg4", "-pix_fmt", "yuv420p", path).CombinedOutput()
+	if err != nil {
+		t.Fatalf("making test video: %v: %s", err, out)
+	}
+}
+
+func TestVideoThumbnail(t *testing.T) {
+	ff := needFFmpeg(t)
+	c, dir := newCache(t, nil)
+	makeVideo(t, ff, filepath.Join(dir, "clip.mp4"))
+	makeVideo(t, ff, filepath.Join(dir, "clip.mov"))
+
+	if _, err := c.Get("clip.mp4", 256); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("before EnableVideo: %v", err)
+	}
+	c.EnableVideo(ff)
+	if !c.VideoEnabled() || !c.Supports("clip.mp4") {
+		t.Fatal("video not enabled")
+	}
+	for _, p := range []string{"clip.mp4", "clip.mov"} {
+		if w, h := thumbSize(t, c, p, 256); w != 256 || h != 144 {
+			t.Errorf("%s thumb = %dx%d, want 256x144", p, w, h)
+		}
+	}
+	if w, h := thumbSize(t, c, "clip.mp4", 1280); w != 640 || h != 360 {
+		t.Errorf("large video thumb = %dx%d, want 640x360 (never enlarged)", w, h)
+	}
+}
+
+// A ".mp4" that is really a playlist pointing at a file outside the shared
+// folder must not get ffmpeg to read it.
+func TestVideoPlaylistTrick(t *testing.T) {
+	ff := needFFmpeg(t)
+	c, dir := newCache(t, nil)
+	c.EnableVideo(ff)
+	secretDir := t.TempDir()
+	secret := filepath.Join(secretDir, "secret.mp4")
+	makeVideo(t, ff, secret)
+	playlist := "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nfile:///" + filepath.ToSlash(secret) + "\n#EXT-X-ENDLIST\n"
+	os.WriteFile(filepath.Join(dir, "trick.mp4"), []byte(playlist), 0o644)
+	ffconcat := "ffconcat version 1.0\nfile '" + filepath.ToSlash(secret) + "'\n"
+	os.WriteFile(filepath.Join(dir, "trick2.mov"), []byte(ffconcat), 0o644)
+
+	for _, p := range []string{"trick.mp4", "trick2.mov"} {
+		if out, err := c.Get(p, 256); err == nil {
+			t.Errorf("%s produced a thumbnail (%s): ffmpeg followed it outside the folder", p, out)
+		}
+	}
+}
+
+func TestFrameServerOnlyServesRegisteredFiles(t *testing.T) {
+	v := &videoThumbnailer{ffmpeg: "unused", timeout: time.Second, files: map[string]servedFile{}}
+	if err := v.start(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(v.base, "http://127.0.0.1:") {
+		t.Fatalf("frame server not on loopback: %s", v.base)
+	}
+	get := func(path string) int {
+		res, err := http.Get(v.base + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if code := get("anything"); code != http.StatusNotFound {
+		t.Errorf("unknown token = %d", code)
+	}
+	f, _ := os.CreateTemp(t.TempDir(), "v")
+	f.WriteString("video bytes")
+	token, done, err := v.register(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := get(token); code != http.StatusOK {
+		t.Errorf("registered token = %d", code)
+	}
+	done()
+	if code := get(token); code != http.StatusNotFound {
+		t.Errorf("token still served after use: %d", code)
+	}
+	f.Close()
 }

@@ -94,6 +94,11 @@ func run(cfg *config.Config) error {
 	defer ix.Close()
 	go ix.Run(ctx, rescanInterval)
 
+	th := thumbs.New(jail, filepath.Join(dataDir, "thumbs"), thumbWorkers())
+	if ff := thumbs.FindFFmpeg(); ff != "" {
+		th.EnableVideo(ff)
+	}
+
 	// Filled in once Tailscale is up; used to let the owner's own devices
 	// choose the first password from the browser.
 	var owner atomic.Pointer[tailnetOwner]
@@ -103,7 +108,7 @@ func run(cfg *config.Config) error {
 		Index:    ix,
 		Auth:     am,
 		CanSetUp: func(r *http.Request) bool { return owner.Load().owns(r) },
-		Thumbs:   thumbs.New(jail, filepath.Join(dataDir, "thumbs"), thumbWorkers()),
+		Thumbs:   th,
 		UI:       web.Dist(),
 		TrashDir: filepath.Join(dataDir, "trash"),
 		ReadOnly: cfg.ReadOnly,
@@ -120,6 +125,11 @@ func run(cfg *config.Config) error {
 		fmt.Print("  (read-only)")
 	}
 	fmt.Println()
+	if th.VideoEnabled() {
+		fmt.Println("🎞️  Video thumbnails: on (ffmpeg found)")
+	} else {
+		fmt.Println("🎞️  Video thumbnails: off — install ffmpeg to see video previews")
+	}
 
 	// Local listener first, so localhost works even before Tailscale is up.
 	// Never 0.0.0.0 — see CLAUDE.md §4.2.

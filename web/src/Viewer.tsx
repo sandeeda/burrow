@@ -393,6 +393,7 @@ function Media({ entry, active }: { entry: Entry; active: boolean }) {
       <video
         className="viewer-media"
         src={downloadURL(entry.path, true)}
+        poster={hasThumb(entry) ? thumbURL(entry, 1280) : undefined}
         controls
         autoPlay
         playsInline

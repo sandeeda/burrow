@@ -22,6 +22,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install ffmpeg (video thumbnail tests)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
       - name: gofmt
         if: runner.os == 'Linux'
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
@@ -39,12 +43,13 @@ jobs:
         if: runner.os == 'Linux'
         run: go test -race ./...
 
-      - name: Fuzz path handling
+      - name: Fuzz path handling and HEIC decoding
         shell: bash
         run: |
           go test ./internal/fsjail -run '^$' -fuzz '^FuzzClean$' -fuzztime 30s
           go test ./internal/fsjail -run '^$' -fuzz '^FuzzJailOpen$' -fuzztime 30s
           go test ./internal/api -run '^$' -fuzz '^FuzzSanitizeUploadName$' -fuzztime 30s
+          go test ./internal/thumbs -run '^$' -fuzz '^FuzzDecodeHEIC$' -fuzztime 30s
 
   web:
     name: Web app

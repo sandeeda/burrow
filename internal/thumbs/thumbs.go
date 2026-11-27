@@ -40,8 +40,8 @@ var Sizes = []int{256, 1280}
 // against decompression bombs. 100 MP covers 48 MP phone photos.
 const MaxPixels = 100_000_000
 
-// ErrUnsupported means the file type can't be thumbnailed (yet), e.g. HEIC
-// or video.
+// ErrUnsupported means the file type can't be thumbnailed, e.g. a document,
+// or a video when ffmpeg isn't available.
 var ErrUnsupported = errors.New("thumbs: unsupported file type")
 
 // ErrDecode means the file isn't a valid image of its type.
@@ -63,18 +63,30 @@ var decoders = map[string]decoder{
 	".webp": {webp.DecodeConfig, webp.Decode},
 }
 
-// Supported reports whether a thumbnail can be made for this file name.
-func Supported(name string) bool {
-	_, ok := decoders[strings.ToLower(path.Ext(name))]
-	return ok
+// Supports reports whether a thumbnail can be made for this file name:
+// common image formats, HEIC (iPhone photos) and, when ffmpeg is available,
+// videos.
+func (c *Cache) Supports(name string) bool {
+	ext := strings.ToLower(path.Ext(name))
+	if _, ok := decoders[ext]; ok {
+		return true
+	}
+	if heicExts[ext] {
+		return true
+	}
+	return videoFormats[ext] != "" && c.video != nil
 }
+
+// VideoEnabled reports whether video thumbnails are available.
+func (c *Cache) VideoEnabled() bool { return c.video != nil }
 
 // Cache makes thumbnails for files in one jail.
 type Cache struct {
-	jail *fsjail.Jail
-	dir  string
-	seed string        // distinguishes shared folders sharing one cache dir
-	sem  chan struct{} // limits concurrent decodes (CPU + memory)
+	jail  *fsjail.Jail
+	dir   string
+	seed  string        // distinguishes shared folders sharing one cache dir
+	sem   chan struct{} // limits concurrent decodes (CPU + memory)
+	video *videoThumbnailer
 
 	mu       sync.Mutex
 	inflight map[string]*call
@@ -104,7 +116,7 @@ func (c *Cache) Get(p string, size int) (string, error) {
 	if !validSize(size) {
 		return "", fmt.Errorf("thumbs: invalid size %d", size)
 	}
-	if !Supported(p) {
+	if !c.Supports(p) {
 		return "", ErrUnsupported
 	}
 	fi, err := c.jail.Stat(p)
@@ -191,7 +203,6 @@ func (c *Cache) generate(p string, size int, out string) (string, error) {
 // render decodes the image at p and returns a JPEG no larger than size.
 func (c *Cache) render(p string, size int) ([]byte, error) {
 	ext := strings.ToLower(path.Ext(p))
-	dec := decoders[ext]
 
 	f, err := c.jail.Open(p)
 	if err != nil {
@@ -199,6 +210,18 @@ func (c *Cache) render(p string, size int) ([]byte, error) {
 	}
 	defer f.Close()
 
+	switch {
+	case heicExts[ext]:
+		img, err := decodeHEIC(f, size)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", p, err)
+		}
+		return encodeJPEG(scale(img, size))
+	case videoFormats[ext] != "":
+		return c.video.frame(f, videoFormats[ext], size)
+	}
+
+	dec := decoders[ext]
 	cfg, err := dec.config(f)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrDecode, p, err)
@@ -222,11 +245,12 @@ func (c *Cache) render(p string, size int) ([]byte, error) {
 		return nil, fmt.Errorf("%w: %s: %v", ErrDecode, p, err)
 	}
 
-	dst := scale(src, size)
-	dst = orient(dst, orientation)
+	return encodeJPEG(orient(scale(src, size), orientation))
+}
 
+func encodeJPEG(img image.Image) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 80}); err != nil {
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80}); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
