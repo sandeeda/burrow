@@ -167,3 +167,8 @@ export const CheckIcon = (p: P) => (
     <path d="m5 12.5 4.5 4.5L19 7.5" />
   </Svg>
 )
+export const LogoutIcon = (p: P) => (
+  <Svg {...p}>
+    <path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15M10 16l4-4-4-4M14 12H4" />
+  </Svg>
+)

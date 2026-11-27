@@ -14,6 +14,7 @@ import {
   EditIcon,
   GridIcon,
   ListIcon,
+  LogoutIcon,
   MoreIcon,
   NewFolderIcon,
   PlusIcon,
@@ -44,8 +45,7 @@ const VIEWS = ['grid', 'list'] as const
 
 type DialogState = { kind: 'rename'; entry: Entry } | { kind: 'delete'; entry: Entry } | { kind: 'mkdir' } | null
 
-export function App() {
-  const [info, setInfo] = useState<Info | null>(null)
+export function App({ info, onLogout }: { info: Info; onLogout: () => void }) {
   const [path, setPath] = useState(() => pathFromHash(location.hash))
   const [direction, setDirection] = useState<'forward' | 'back' | 'none'>('none')
   const [entries, setEntries] = useState<Entry[] | null>(null)
@@ -69,8 +69,8 @@ export function App() {
   const cameraInput = useRef<HTMLInputElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
   const largeTitle = useRef<HTMLHeadingElement>(null)
-  const readOnly = info?.readOnly ?? true
-  const rootName = info?.name ?? 'Burrow'
+  const readOnly = info.readOnly
+  const rootName = info.name
 
   const flash = useCallback((msg: string) => {
     setToast(msg)
@@ -88,10 +88,6 @@ export function App() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [])
-
-  useEffect(() => {
-    api.info().then(setInfo, (e) => setError(e.message))
   }, [])
 
   useEffect(() => {
@@ -306,6 +302,9 @@ export function App() {
         checked: sort === s,
         onSelect: () => (setSort(s), save('burrow.sort', s)),
       })),
+    },
+    {
+      items: [{ label: 'Log Out', icon: <LogoutIcon size={18} />, onSelect: onLogout }],
     },
   ]
 
