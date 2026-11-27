@@ -1073,3 +1073,40 @@ func TestSessionAndLogout(t *testing.T) {
 	}
 	wantStatus(t, e.get("/api/list"), http.StatusUnauthorized)
 }
+
+func TestCleanStaleUploads(t *testing.T) {
+	e := newEnv(t, false)
+	// newEnv created a fresh ".burrow-upload-abc.tmp"; add an old one in a subfolder.
+	old := filepath.Join(e.dir, "Photos", index.SkipPrefix+"old.tmp")
+	os.WriteFile(old, []byte("partial"), 0o644)
+	past := time.Now().Add(-48 * time.Hour)
+	os.Chtimes(old, past, past)
+	look := filepath.Join(e.dir, "Photos", "not-burrow.tmp")
+	os.WriteFile(look, nil, 0o644)
+	os.Chtimes(look, past, past)
+
+	s := New(Options{Jail: e.ix.Jail(), Index: e.ix, Auth: e.am, TrashDir: e.trash, Logf: t.Logf})
+	if n := s.CleanStaleUploads(context.Background(), 24*time.Hour); n != 1 {
+		t.Errorf("removed %d, want 1", n)
+	}
+	if _, err := os.Stat(old); err == nil {
+		t.Error("stale temp file kept")
+	}
+	if !e.exists(index.SkipPrefix + "abc.tmp") {
+		t.Error("recent temp file (possible upload in progress) was removed")
+	}
+	if !e.exists("Photos/not-burrow.tmp") {
+		t.Error("user's own .tmp file was removed")
+	}
+}
+
+func TestHSTSOnlyOverHTTPS(t *testing.T) {
+	e := newEnv(t, false)
+	if h := e.get("/api/session").Header().Get("Strict-Transport-Security"); h != "" {
+		t.Errorf("HSTS on plain HTTP: %q", h)
+	}
+	req := httptest.NewRequest(http.MethodGet, "https://"+testHost+"/api/session", nil)
+	if h := e.do(req).Header().Get("Strict-Transport-Security"); !strings.HasPrefix(h, "max-age=") {
+		t.Errorf("HSTS over HTTPS = %q", h)
+	}
+}

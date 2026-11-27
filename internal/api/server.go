@@ -96,6 +96,10 @@ func (s *Server) Handler(allowedHosts ...string) http.Handler {
 	inner := withGzip(cop.Handler(s.mux))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		setSecurityHeaders(w.Header())
+		if r.TLS != nil {
+			// Never fall back to plain HTTP on the tailnet name.
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+		}
 		if !allowed[strings.ToLower(r.Host)] {
 			writeError(w, http.StatusMisdirectedRequest, "unknown host")
 			return

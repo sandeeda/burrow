@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"golang.org/x/term"
+	"tailscale.com/logtail"
 	"tailscale.com/tsnet"
 
 	"github.com/sandeeda/burrow/internal/api"
@@ -93,6 +94,12 @@ func run(cfg *config.Config) error {
 		ReadOnly: cfg.ReadOnly,
 	})
 
+	go func() {
+		if n := srv.CleanStaleUploads(ctx, 24*time.Hour); n > 0 {
+			log.Printf("Removed %d leftover upload file(s) from interrupted uploads", n)
+		}
+	}()
+
 	fmt.Printf("📁 Sharing:   %s", cfg.Folder)
 	if cfg.ReadOnly {
 		fmt.Print("  (read-only)")
@@ -113,6 +120,10 @@ func run(cfg *config.Config) error {
 	if os.Getenv("BURROW_DEBUG") != "" {
 		tsLog = log.Printf
 	}
+	// No telemetry (CLAUDE.md §4.10): tsnet would otherwise upload its
+	// diagnostic logs to log.tailscale.com.
+	logtail.Disable()
+
 	ts := &tsnet.Server{
 		Hostname: cfg.Hostname,
 		Dir:      filepath.Join(dataDir, "tsnet"),
