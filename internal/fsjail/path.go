@@ -67,6 +67,12 @@ func ValidName(name string) bool {
 	return validName(name, runtime.GOOS == "windows")
 }
 
+// ValidWindowsName reports whether name is acceptable under Windows rules,
+// whatever the current OS. Used for uploads so files stay portable.
+func ValidWindowsName(name string) bool {
+	return validName(name, true)
+}
+
 func validName(s string, windows bool) bool {
 	if s == "" || s == "." || s == ".." || len(s) > MaxNameLen || !utf8.ValidString(s) {
 		return false
