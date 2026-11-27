@@ -26,7 +26,7 @@ const (
 )
 
 func main() {
-	if err := run(); err != nil {
+	if err := run(); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("burrow: %v", err)
 	}
 }
@@ -67,9 +67,9 @@ func run() error {
 		return err
 	}
 
-	tlsLn, err := ts.ListenTLS("tcp", ":443")
+	tlsLn, err := listenTLSWithRetry(ctx, ts)
 	if err != nil {
-		return fmt.Errorf("listen on tailnet :443: %w", err)
+		return err
 	}
 	fmt.Printf("✅ Burrow is live at https://%s\n", dnsName)
 	go serve(tlsLn, handler)
@@ -109,16 +109,35 @@ func waitForTailscale(ctx context.Context, ts *tsnet.Server) (string, error) {
 			fmt.Printf("   %s\n\n", st.AuthURL)
 		}
 		if st.BackendState == "Running" && st.Self != nil {
-			if len(st.CertDomains) == 0 {
-				fmt.Println("⚠️  HTTPS certificates are not enabled for your tailnet.")
-				fmt.Println("   Enable MagicDNS and HTTPS in https://login.tailscale.com/admin/dns")
-			}
 			return strings.TrimSuffix(st.Self.DNSName, "."), nil
 		}
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
 		case <-time.After(500 * time.Millisecond):
+		}
+	}
+}
+
+// listenTLSWithRetry keeps trying to open the tailnet HTTPS listener, so a user
+// who enables HTTPS certificates in the admin console after starting Burrow
+// doesn't need to restart it. Localhost keeps serving in the meantime.
+func listenTLSWithRetry(ctx context.Context, ts *tsnet.Server) (net.Listener, error) {
+	warned := false
+	for {
+		ln, err := ts.ListenTLS("tcp", ":443")
+		if err == nil {
+			return ln, nil
+		}
+		if !warned {
+			warned = true
+			fmt.Printf("⏳ Waiting for Tailscale HTTPS: %v\n", err)
+			fmt.Println("   Enable MagicDNS and HTTPS in https://login.tailscale.com/admin/dns — Burrow will pick it up automatically.")
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(10 * time.Second):
 		}
 	}
 }
