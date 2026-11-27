@@ -24,7 +24,7 @@ Phase 0 ✅ DONE (2026-11-26): owner saw "Hello from Burrow" on phone over mobil
 - [ ] REST API: list, metadata, download (Range via `http.ServeContent`), upload (streaming multipart, temp+atomic no-overwrite), mkdir, rename, delete → trash in app data dir
 - [ ] SQLite filename index (`modernc.org/sqlite`), startup walk + change watching
 - [ ] Endpoint unit + integration tests
-- [ ] CI (Linux + Windows): test, vet, govulncheck, short fuzz run
+- [x] CI (`.github/workflows/ci.yml`): Linux + Windows — gofmt, vet, build, test, race (Linux), 30s fuzz per target, govulncheck. First run green 2026-11-27.
 - [x] [HUMAN] `gh auth login` done → module path `github.com/sandeeda/burrow`, repo created (private), pushed
 
 ## Open questions
@@ -39,7 +39,7 @@ Phase 0 ✅ DONE (2026-11-26): owner saw "Hello from Burrow" on phone over mobil
 - fsjail Rename: existence check + rename is two steps (tiny race). Acceptable for single-user; uploads will use a race-free path.
 
 ## Known issues
-- Symlink escape tests skip on the owner's Windows machine (symlinks need Developer Mode/admin). They will run in Linux CI.
+- Symlink escape tests skip on the owner's Windows machine (symlinks need Developer Mode/admin). They run in Linux CI (symlinks work there).
 - Bash tool on this machine can mangle `'\\'` inside heredocs — use the Write tool for Go files containing backslashes.
 
 ## Ideas (out of scope for now)
