@@ -24,3 +24,6 @@ tsnet-state/
 .DS_Store
 Thumbs.db
 *.exe~
+
+# Launch drafts are private working notes, not part of the repo
+docs/launch/

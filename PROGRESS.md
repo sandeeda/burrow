@@ -111,7 +111,7 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 - [x] Repo made public at owner's request (2026-11-27) after a history scan for secrets (none; author email is visible in commits). Private vulnerability reporting on; topics added. CodeQL now runs (first scan green).
 - [x] [HUMAN] Fresh-machine test: owner confirmed it works (2026-11-27)
 - [x] Homebrew: public repo sandeeda/homebrew-tap; SSH deploy key (write, that repo only) stored as secret HOMEBREW_TAP_DEPLOY_KEY; GoReleaser pushes Casks/burrow.rb on release. Verify `brew install sandeeda/tap/burrow` on macOS after v0.1.0 is published.
-- [x] Phase 4: launch README (comparison table, FAQ, security, roadmap) + launch kit in docs/launch/ (Show HN, r/selfhosted, r/homelab, r/golang, X thread, LinkedIn, Product Hunt, checklist)
+- [x] Phase 4: launch README (comparison table, FAQ, security, roadmap) + launch kit in docs/launch/ — kept local only, gitignored at owner's request (Show HN, r/selfhosted, r/homelab, r/golang, X thread, LinkedIn, Product Hunt, checklist)
 - [x] Multi-instance support (--hostname gets its own tsnet + auth dirs) so the README FAQ is true
 - [ ] Tag v0.1.0 → draft release (CI builds it)
 - [ ] [HUMAN] Review launch drafts, decide on AI disclosure line, record demo GIF, publish the release, post
