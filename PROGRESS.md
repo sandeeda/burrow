@@ -1,7 +1,9 @@
 # Burrow — Progress
 
 ## Current phase
-**Phase 1 — Core file server** — code complete; waiting for CI green on Linux + Windows to close it out.
+**Phase 2 — Web UI (PWA)** — not started.
+
+Phase 1 ✅ DONE (2026-11-27): all tests + fuzzing green in CI on Linux and Windows (run 45930813599).
 
 Phase 0 ✅ DONE (2026-11-26): owner saw "Hello from Burrow" on phone over mobile data at https://burrow.taile8ab63.ts.net.
 
@@ -53,7 +55,7 @@ Errors: `{error}` with 400 invalid path, 403 permission/read-only/CSRF, 404, 409
 - Manual end-to-end on Windows (2026-11-27): list, search, download, range, upload (collision → `cat (1).jpg`), mkdir, rename, delete → trash; attacks (`../`, `..\`, `C:/`, UNC, evil Host, cross-site POST, missing header, `../../evil.txt` upload) all rejected.
 
 ## Next
-- [ ] CI green on Linux + Windows for the Phase 1 code → Phase 1 done
+- [x] CI green on Linux + Windows for the Phase 1 code → Phase 1 done
 - [ ] Phase 2: web UI (PWA) — needs [HUMAN] phone test at the end
 
 ## Open questions
